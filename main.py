@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog,
 from display import RadarDisplay
 from fg_link import FGLink
 from radar import RadarScanner
-from weather import SCENARIOS, WeatherModel
+from weather import SCENARIOS, WeatherModel, parse_metar
 
 SIM_SPEED_KT = 250.0
 
@@ -38,6 +38,8 @@ class MainWindow(QMainWindow):
         self.origin = None          # lat/lon that maps to (0, 0) NM
         self.ax = self.ay = 0.0     # aircraft position (NM)
         self.heading = 0.0
+        self.fg_metar = None        # last METAR seen in FlightGear
+        self.sent_metar = None      # last METAR we sent to FlightGear
 
         self._build_ui()
         self.regenerate()
@@ -158,6 +160,7 @@ class MainWindow(QMainWindow):
             self.status.setText(f"Could not connect: {exc}")
             return
         self.origin = None
+        self.fg_metar = None
         self.source.setCurrentText("FlightGear")
         self.status.setText("Connected, waiting for data...")
         self.connect_btn.setText("Disconnect")
@@ -169,6 +172,7 @@ class MainWindow(QMainWindow):
             return
         try:
             self.fg.send_metar(metar)
+            self.sent_metar = metar
             self.status.setText("Weather sent to FlightGear")
         except OSError as exc:
             self.status.setText(f"Send failed: {exc}")
@@ -204,7 +208,30 @@ class MainWindow(QMainWindow):
         self.ay = (s["lat"] - lat0) * 60.0
         self.heading = s["heading"]
         self.status.setText(f"Connected  ALT {s['alt_ft']:.0f} ft")
+
+        # Wind always comes from FlightGear; the sliders just show it.
+        if "wind_from" in s:
+            self.weather.wind_from = s["wind_from"]
+            self.weather.wind_kt = s["wind_kt"]
+            self.wind_dir.setValue(round(s["wind_from"]) % 360)
+            self.wind_kt.setValue(round(s["wind_kt"]))
+
+        # Weather changed inside FlightGear (not by our Send): show it on the radar.
+        metar = s.get("metar", "")
+        if metar and metar != self.fg_metar:
+            self.fg_metar = metar
+            parsed = parse_metar(metar)
+            if parsed and metar != self.sent_metar:
+                self._apply_fg_weather(*parsed)
         return True
+
+    def _apply_fg_weather(self, scenario, intensity, coverage):
+        self.scenario.blockSignals(True)
+        self.scenario.setCurrentText(scenario)
+        self.scenario.blockSignals(False)
+        self.intensity.setValue(round(intensity * 100))
+        self.coverage.setValue(round(coverage * 100))
+        self.regenerate()
 
     def tick(self):
         now = time.perf_counter()
@@ -216,7 +243,11 @@ class MainWindow(QMainWindow):
         self.weather.wind_kt = float(self.wind_kt.value())
         self.metar.setText(self.weather.to_metar())
 
-        if self.source.currentText() == "FlightGear" and self._update_from_fg():
+        fg_live = self.source.currentText() == "FlightGear" and self._update_from_fg()
+        fg_wind = fg_live and "wind_from" in self.fg.state
+        self.wind_dir.setEnabled(not fg_wind)
+        self.wind_kt.setEnabled(not fg_wind)
+        if fg_live:
             scale, source = 1.0, "FLIGHTGEAR"
         else:
             scale, source = float(self.time_scale.value()), "SIM"

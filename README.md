@@ -27,7 +27,12 @@ It works on its own with simulated flight, and can connect to FlightGear.
 
 2. In the app, click "Connect to FlightGear". The radar now follows the
    aircraft's position and heading.
-3. Click "Send weather to FlightGear" to send the current weather as a METAR.
+3. While connected, the radar follows FlightGear's weather:
+   - Wind always comes from FlightGear (the wind sliders are locked).
+   - If the METAR changes inside FlightGear, the scenario, storm strength
+     and coverage update to match it.
+4. Changes you make in the app stay in the app until you click
+   "Send weather to FlightGear", which sends them as a METAR.
 
 Check the METAR property name in FlightGear under
 Debug > Browse Internal Properties > environment. If it differs from

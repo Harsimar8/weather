@@ -18,6 +18,12 @@ POSITION_PROPS = {
     "heading": "/orientation/heading-deg",
 }
 
+# Live wind at the aircraft. Read only: the radar follows FlightGear's wind.
+WIND_PROPS = {
+    "wind_from": "/environment/wind-from-heading-deg",
+    "wind_kt": "/environment/wind-speed-kt",
+}
+
 
 class FGLink:
     def __init__(self, host="localhost", port=5401, poll_hz=5.0):
@@ -86,6 +92,12 @@ class FGLink:
         while not self._stop.is_set():
             try:
                 new = {k: float(self.get(p)) for k, p in POSITION_PROPS.items()}
+                for k, p in WIND_PROPS.items():
+                    try:
+                        new[k] = float(self.get(p))
+                    except ValueError:
+                        pass  # property missing in this FlightGear version
+                new["metar"] = self.get(METAR_PROPERTY)
                 self.state = new
             except (OSError, ValueError) as exc:
                 self.error = str(exc) or exc.__class__.__name__

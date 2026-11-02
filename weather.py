@@ -153,3 +153,34 @@ class WeatherModel:
                 clouds = "FEW025CB BKN030 OVC080"
             parts = [vis, rain, clouds]
         return " ".join(["XXXX", stamp, wind, *parts, "18/15", "Q1008"])
+
+
+COVER = {"FEW": 0.5, "SCT": 0.8, "BKN": 1.0, "OVC": 1.3}
+
+
+def parse_metar(metar):
+    """Turn a METAR from FlightGear into (scenario, intensity, coverage).
+
+    The reverse of WeatherModel.to_metar. Returns None if there is nothing to read.
+    """
+    tokens = metar.split()
+    if len(tokens) < 3:
+        return None
+    rain = next((t for t in tokens if any(w in t for w in ("TS", "RA", "SH", "DZ"))
+                 and not t.startswith("RE")), "")
+    clouds = [t for t in tokens if t[:3] in COVER]
+    cb = any(t.endswith(("CB", "TCU")) for t in clouds)
+    coverage = max((COVER[t[:3]] for t in clouds), default=0.5)
+    if "TS" in rain or cb:
+        scenario = "Scattered Cb"
+    elif rain:
+        scenario = "Embedded cell in rain"
+    else:
+        return "Clear", 0.3, coverage
+    if rain.startswith("+"):
+        intensity = 1.3
+    elif rain.startswith("-"):
+        intensity = 0.5
+    else:
+        intensity = 1.0 if "TS" in rain else 0.9
+    return scenario, intensity, coverage
