@@ -28,6 +28,17 @@ class Cell:
     turb: float = 0.0  # turbulence (shown in TURB mode)
     phase: float = 0.0
     rate: float = 0.0  # how fast it grows and decays
+    key: object = None  # FlightGear cloud this cell sits on (Detailed Weather)
+
+
+# Radar strength of Detailed Weather clouds for each weather tile type.
+# Fair-weather clouds give no echo; other types get a moderate one.
+TILE_PEAK = {
+    "high_pressure_core": 0.0, "high_pressure": 0.0, "high_pressure_border": 0.0,
+    "low_pressure_border": 0.5, "low_pressure": 0.7, "low_pressure_core": 0.9,
+    "warmfront": 0.7, "coldfront": 1.1, "thunderstorms": 1.2,
+}
+STORMY_TILES = {"coldfront", "thunderstorms"}
 
 
 class ValueNoise:
@@ -102,6 +113,40 @@ class WeatherModel:
             add(11, 33, 2, 2, 0, 0.9, 1.0)      # hook curling round
             add(13, 30, 1.8, 1.8, 0, 0.8, 1.0)
             add(11, 27.5, 1.6, 1.6, 0, 0.7, 0.0)
+
+    def sync_clouds(self, clouds, code):
+        """Put a cell on each Detailed Weather cloud from FlightGear.
+
+        clouds maps a cloud id to its (x, y) in NM. Cells already placed keep
+        drifting with the wind; new clouds get a cell, vanished ones lose theirs.
+        """
+        if code != self.scenario:
+            self.scenario, self.cells = code, []
+        base = TILE_PEAK.get(code, 0.6)
+        if base <= 0:
+            self.cells = []
+            return
+        self.cells = [c for c in self.cells if c.key in clouds]
+        have = {c.key for c in self.cells}
+        rnd = self.rng
+        for key, (x, y) in clouds.items():
+            if key in have:
+                continue
+            size = rnd.uniform(2.0, 3.5)
+            peak = base * rnd.uniform(0.6, 1.15)
+            self.cells.append(Cell(
+                x, y, size, size * rnd.uniform(0.7, 1.0), rnd.uniform(0, math.pi),
+                peak, 1.0 if code in STORMY_TILES and peak > 1.0 else 0.0,
+                phase=rnd.uniform(0, 2 * math.pi), rate=rnd.uniform(0.002, 0.01),
+                key=key))
+
+    def strike(self, x, y):
+        """Lightning hit near (x, y): the nearest cell becomes a storm core."""
+        near = min(self.cells, key=lambda c: (c.x - x) ** 2 + (c.y - y) ** 2,
+                   default=None)
+        if near and math.hypot(near.x - x, near.y - y) < 5.0:
+            near.peak = max(near.peak, 1.35)
+            near.turb = 1.0
 
     # ------------------------------------------------------------- dynamics
     def step(self, dt):

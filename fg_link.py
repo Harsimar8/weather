@@ -24,6 +24,34 @@ WIND_PROPS = {
     "wind_kt": "/environment/wind-speed-kt",
 }
 
+# Detailed Weather (Advanced Weather) publishes its weather type, its cloud
+# positions and the latest lightning strike. Basic Weather leaves these empty.
+LW_CODE = "/local-weather/tiles/code"
+# Weather engine chosen in the Weather dialog ('1' = Detailed Weather). The
+# old tile code stays in the tree after switching back to Basic Weather.
+LW_MODE = "/sim/gui/dialogs/metar/mode/local-weather"
+LW_TILE_COUNTER = "/local-weather/tiles/tile-counter"
+LW_CLOUD = "/local-weather/clouds/tile[{t}]/cloud[{c}]/position/{axis}-deg"
+LIGHTNING_PROPS = {
+    "strike_lat": "/local-weather/lightning/latitude-deg",
+    "strike_lon": "/local-weather/lightning/longitude-deg",
+}
+CLOUD_POLL_S = 10.0   # cloud positions do not change, so read them now and then
+CLOUD_CHUNK = 25      # clouds asked for in one go
+MAX_TILES = 20        # newest cloud tiles to look at
+
+FAST_PROPS = {**POSITION_PROPS, **WIND_PROPS, **LIGHTNING_PROPS,
+              "metar": METAR_PROPERTY, "lw_code": LW_CODE,
+              "lw_mode": LW_MODE, "lw_tiles": LW_TILE_COUNTER}
+
+
+def _num(text):
+    """Property value as a float, or None if missing (FlightGear sends '')."""
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
 
 class FGLink:
     def __init__(self, host="localhost", port=5401, poll_hz=5.0):
@@ -33,6 +61,7 @@ class FGLink:
         self.reader = None
         self.lock = threading.Lock()
         self.state = {}
+        self.clouds = {}
         self.connected = False
         self.error = ""
         self._thread = None
@@ -76,10 +105,14 @@ class FGLink:
         finally:
             self.sock.settimeout(2)
 
-    def get(self, path):
+    def get_many(self, paths):
+        """Ask for several properties at once: one reply line per path, in order."""
         with self.lock:
-            self._send(f"get {path}")
-            return self.reader.readline().strip()
+            self.sock.sendall("".join(f"get {p}\r\n" for p in paths).encode("utf-8"))
+            return [self.reader.readline().strip() for _ in paths]
+
+    def get(self, path):
+        return self.get_many([path])[0]
 
     def set(self, path, value):
         with self.lock:
@@ -89,21 +122,55 @@ class FGLink:
 
     # ------------------------------------------------------------ polling
     def _poll_loop(self):
+        next_clouds = 0.0
         while not self._stop.is_set():
             try:
-                new = {k: float(self.get(p)) for k, p in POSITION_PROPS.items()}
-                for k, p in WIND_PROPS.items():
-                    try:
-                        new[k] = float(self.get(p))
-                    except ValueError:
-                        pass  # property missing in this FlightGear version
-                new["metar"] = self.get(METAR_PROPERTY)
+                raw = dict(zip(FAST_PROPS, self.get_many(FAST_PROPS.values())))
+                new = {k: float(raw[k]) for k in POSITION_PROPS}
+                for k in (*WIND_PROPS, *LIGHTNING_PROPS):
+                    value = _num(raw[k])
+                    if value is not None:  # missing in this FlightGear version
+                        new[k] = value
+                new["metar"] = raw["metar"]
+                # Missing mode property (other versions): trust the tile code.
+                detailed = raw["lw_mode"] in ("1", "true", "")
+                code = raw["lw_code"] if detailed else ""
+                new["lw_code"] = code
+                if code and time.monotonic() >= next_clouds:
+                    self.clouds = self._read_clouds(int(_num(raw["lw_tiles"]) or 0))
+                    next_clouds = time.monotonic() + CLOUD_POLL_S
+                new["clouds"] = self.clouds if code else {}
                 self.state = new
             except (OSError, ValueError) as exc:
                 self.error = str(exc) or exc.__class__.__name__
                 self.connected = False
                 return
             time.sleep(self.poll_interval)
+
+    def _read_clouds(self, counter):
+        """Detailed Weather cloud positions as {(tile, index): (lat, lon)}."""
+        tiles = range(max(0, counter - MAX_TILES + 1), counter + 1)
+        # Only tiles that still have clouds (old ones are removed as you fly).
+        first = self.get_many([LW_CLOUD.format(t=t, c=0, axis="latitude") for t in tiles])
+        clouds = {}
+        for t, lat0 in zip(tiles, first):
+            if _num(lat0) is None:
+                continue
+            start = 0
+            while True:
+                idx = range(start, start + CLOUD_CHUNK)
+                vals = self.get_many([LW_CLOUD.format(t=t, c=c, axis=a)
+                                      for c in idx for a in ("latitude", "longitude")])
+                found = False
+                for n, c in enumerate(idx):
+                    lat, lon = _num(vals[2 * n]), _num(vals[2 * n + 1])
+                    if lat is not None and lon is not None:
+                        clouds[(t, c)] = (lat, lon)
+                        found = True
+                if not found:
+                    break
+                start += CLOUD_CHUNK
+        return clouds
 
     def send_metar(self, metar):
         self.set(METAR_PROPERTY, metar)

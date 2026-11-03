@@ -40,6 +40,9 @@ class MainWindow(QMainWindow):
         self.heading = 0.0
         self.fg_metar = None        # last METAR seen in FlightGear
         self.sent_metar = None      # last METAR we sent to FlightGear
+        self.synced_clouds = None   # Detailed Weather clouds already on the radar
+        self.last_strike = None     # last lightning strike already applied
+        self.notice = ("", 0.0)     # short message kept under the live status
 
         self._build_ui()
         self.regenerate()
@@ -80,8 +83,8 @@ class MainWindow(QMainWindow):
         self.coverage = slider(50, 200, 100)
         self.wind_dir = slider(0, 359, 270)
         self.wind_kt = slider(0, 80, 25)
-        regen = QPushButton("Regenerate storms")
-        regen.clicked.connect(self.regenerate)
+        self.regen = QPushButton("Regenerate storms")
+        self.regen.clicked.connect(self.regenerate)
         self.send_btn = QPushButton("Send weather to FlightGear")
         self.send_btn.clicked.connect(self.send_weather)
         self.metar = QLabel()
@@ -92,7 +95,7 @@ class MainWindow(QMainWindow):
         f.addRow("Coverage", self.coverage)
         f.addRow("Wind from", self.wind_dir)
         f.addRow("Wind speed", self.wind_kt)
-        f.addRow(regen)
+        f.addRow(self.regen)
         f.addRow(self.send_btn)
         f.addRow("METAR", self.metar)
         self.coverage.sliderReleased.connect(self.regenerate)
@@ -161,6 +164,7 @@ class MainWindow(QMainWindow):
             return
         self.origin = None
         self.fg_metar = None
+        self.synced_clouds = self.last_strike = None
         self.source.setCurrentText("FlightGear")
         self.status.setText("Connected, waiting for data...")
         self.connect_btn.setText("Disconnect")
@@ -173,9 +177,20 @@ class MainWindow(QMainWindow):
         try:
             self.fg.send_metar(metar)
             self.sent_metar = metar
-            self.status.setText("Weather sent to FlightGear")
+            self._notify("Weather sent to FlightGear")
         except OSError as exc:
-            self.status.setText(f"Send failed: {exc}")
+            self._notify(f"Send failed: {exc}")
+
+    def _notify(self, text, seconds=4.0):
+        """Show text for a few seconds, even while the status updates every frame."""
+        self.notice = (text, time.perf_counter() + seconds)
+        self._set_status("")
+
+    def _set_status(self, text):
+        msg, until = self.notice
+        if msg and time.perf_counter() < until:
+            text = f"{text}\n{msg}" if text else msg
+        self.status.setText(text)
 
     def save_image(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save radar image",
@@ -190,7 +205,8 @@ class MainWindow(QMainWindow):
             float(self.range.currentText()), gain=self.gain.value() / 100,
             attenuation=self.atten.isChecked(), turb_mode=self.turb.isChecked())
 
-    def _update_from_fg(self):
+    def _update_from_fg(self, follow_weather=True):
+        """Position always follows FlightGear; wind and METAR only if follow_weather."""
         if not (self.fg and self.fg.connected):
             if self.fg and self.fg.error:
                 self.status.setText(f"Connection lost: {self.fg.error}")
@@ -203,11 +219,11 @@ class MainWindow(QMainWindow):
             self.ax = self.ay = 0.0
             self.heading = s["heading"]
             self.regenerate()
-        lat0, lon0 = self.origin
-        self.ax = (s["lon"] - lon0) * 60.0 * math.cos(math.radians(lat0))
-        self.ay = (s["lat"] - lat0) * 60.0
+        self.ax, self.ay = self._to_nm(s["lat"], s["lon"])
         self.heading = s["heading"]
-        self.status.setText(f"Connected  ALT {s['alt_ft']:.0f} ft")
+        self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft")
+        if not follow_weather:
+            return True
 
         # Wind always comes from FlightGear; the sliders just show it.
         if "wind_from" in s:
@@ -216,14 +232,45 @@ class MainWindow(QMainWindow):
             self.wind_dir.setValue(round(s["wind_from"]) % 360)
             self.wind_kt.setValue(round(s["wind_kt"]))
 
+        if s.get("lw_code"):
+            self._update_detailed_weather(s)
+            return True
+
+        # Basic Weather: no positions, so build storms that match the METAR.
         # Weather changed inside FlightGear (not by our Send): show it on the radar.
         metar = s.get("metar", "")
-        if metar and metar != self.fg_metar:
+        if self.weather.scenario not in SCENARIOS:
+            # Just left Detailed Weather: replace its cloud echoes, even if the
+            # METAR is unchanged or is the one we sent.
+            self.fg_metar = metar
+            self._apply_fg_weather(*(parse_metar(metar) or ("Clear", 1.0, 1.0)))
+        elif metar and metar != self.fg_metar:
             self.fg_metar = metar
             parsed = parse_metar(metar)
             if parsed and metar != self.sent_metar:
                 self._apply_fg_weather(*parsed)
         return True
+
+    def _to_nm(self, lat, lon):
+        """Lat/lon to x (east), y (north) in NM from the origin."""
+        lat0, lon0 = self.origin
+        return ((lon - lon0) * 60.0 * math.cos(math.radians(lat0)),
+                (lat - lat0) * 60.0)
+
+    def _update_detailed_weather(self, s):
+        """Detailed Weather: storms sit on FlightGear's own clouds."""
+        code, clouds = s["lw_code"], s["clouds"]
+        if clouds is not self.synced_clouds or code != self.weather.scenario:
+            self.synced_clouds = clouds
+            self.weather.sync_clouds(
+                {k: self._to_nm(*ll) for k, ll in clouds.items()}, code)
+        strike = (s.get("strike_lat"), s.get("strike_lon"))
+        if strike[0] and strike != self.last_strike:
+            self.last_strike = strike
+            self.weather.strike(*self._to_nm(*strike))
+        self.intensity.setValue(100)
+        self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
+                         f"Detailed Weather: {len(clouds)} clouds ({code})")
 
     def _apply_fg_weather(self, scenario, intensity, coverage):
         self.scenario.blockSignals(True)
@@ -243,12 +290,26 @@ class MainWindow(QMainWindow):
         self.weather.wind_kt = float(self.wind_kt.value())
         self.metar.setText(self.weather.to_metar())
 
-        fg_live = self.source.currentText() == "FlightGear" and self._update_from_fg()
-        fg_wind = fg_live and "wind_from" in self.fg.state
+        # While connected the aircraft always follows FlightGear. The Mode only
+        # decides where the weather comes from: FlightGear, or the app (to Send).
+        fg_mode = self.source.currentText() == "FlightGear"
+        fg_live = self._update_from_fg(follow_weather=fg_mode)
+        fg_weather = fg_live and fg_mode
+        fg_wind = fg_weather and "wind_from" in self.fg.state
+        # Weather comes from FlightGear when live; the pilot only has radar controls.
+        for w in (self.scenario, self.intensity):
+            w.setEnabled(not fg_weather)
+        # Coverage and storm layout cannot be sent in a METAR: locked whenever connected.
+        self.coverage.setEnabled(not fg_live)
+        self.regen.setEnabled(not fg_live)
         self.wind_dir.setEnabled(not fg_wind)
         self.wind_kt.setEnabled(not fg_wind)
+        self.sim_heading.setEnabled(not fg_live)
+        self.time_scale.setEnabled(not fg_live)
+        # Send is for preparing weather: connected, but in Simulated mode.
+        self.send_btn.setEnabled(fg_live and not fg_mode)
         if fg_live:
-            scale, source = 1.0, "FLIGHTGEAR"
+            scale, source = 1.0, "FLIGHTGEAR" if fg_mode else "FG  WX EDIT"
         else:
             scale, source = float(self.time_scale.value()), "SIM"
             self.heading = float(self.sim_heading.value())
