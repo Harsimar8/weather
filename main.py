@@ -232,9 +232,14 @@ class MainWindow(QMainWindow):
             self.wind_dir.setValue(round(s["wind_from"]) % 360)
             self.wind_kt.setValue(round(s["wind_kt"]))
 
-        if s.get("lw_code"):
+        if s.get("lw_code") and s.get("clouds"):
             self._update_detailed_weather(s)
             return True
+        if s.get("lw_code"):
+            # Detailed Weather chosen but its engine made no clouds (not started
+            # with Apply, or the tile code is left over): fall back to the METAR.
+            self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
+                             "Detailed Weather has no clouds: using METAR")
 
         # Basic Weather: no positions, so build storms that match the METAR.
         # Weather changed inside FlightGear (not by our Send): show it on the radar.

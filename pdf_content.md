@@ -20,7 +20,7 @@ substantial aircraft damage (Figure 1).
 Figure 1  
 A320 Radome after Hail Encounter 
 The aim of this Flight Operational Briefing Note is to provide additional information 
-about weather radar capabilities and limitations, in order to improve the flight crew’s 
+about weather radar capabilities and limitations, in order to improvpe the flight crew’s 
 overall understanding of the system, and to help prevent such incidents from occurring. 
 II 
 Background Information - Statistical Data 
