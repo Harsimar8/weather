@@ -73,6 +73,7 @@ class WeatherModel:
         self.wind_kt = 25.0
         self.time = 0.0
         self.drift = np.zeros(2)
+        self.generation = 0    # goes up each time new storms are made
 
     # ------------------------------------------------------------ scenarios
     def generate(self, scenario, ax, ay, heading):
@@ -80,6 +81,7 @@ class WeatherModel:
         self.scenario = scenario
         self.cells = []
         self.drift[:] = 0.0
+        self.generation += 1
         h = math.radians(heading)
         rnd = self.rng
 
@@ -117,8 +119,8 @@ class WeatherModel:
     def sync_clouds(self, clouds, code):
         """Put a cell on each Detailed Weather cloud from FlightGear.
 
-        clouds maps a cloud id to its (x, y) in NM. Cells already placed keep
-        drifting with the wind; new clouds get a cell, vanished ones lose theirs.
+        clouds maps a cloud id to its (x, y) in NM. Every cell is moved to its
+        cloud's position; new clouds get a cell, vanished ones lose theirs.
         """
         if code != self.scenario:
             self.scenario, self.cells = code, []
@@ -127,6 +129,9 @@ class WeatherModel:
             self.cells = []
             return
         self.cells = [c for c in self.cells if c.key in clouds]
+        # Keep each cell exactly on its FlightGear cloud, so they never drift apart.
+        for c in self.cells:
+            c.x, c.y = clouds[c.key]
         have = {c.key for c in self.cells}
         rnd = self.rng
         for key, (x, y) in clouds.items():
@@ -156,6 +161,8 @@ class WeatherModel:
         dist = self.wind_kt / 3600.0 * dt
         dx, dy = dist * math.sin(to), dist * math.cos(to)
         for c in self.cells:
+            if c.key is not None:
+                continue  # FlightGear cloud: its position comes only from FlightGear
             c.x += dx
             c.y += dy
         self.drift += (dx, dy)

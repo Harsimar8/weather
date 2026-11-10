@@ -9,8 +9,8 @@ import time
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog,
                                QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QLineEdit, QMainWindow, QPushButton, QSlider,
-                               QSpinBox, QVBoxLayout, QWidget)
+                               QLineEdit, QMainWindow, QPushButton, QScrollArea,
+                               QSlider, QSpinBox, QVBoxLayout, QWidget)
 
 from display import RadarDisplay
 from fg_link import FGLink
@@ -40,6 +40,9 @@ class MainWindow(QMainWindow):
         self.heading = 0.0
         self.fg_metar = None        # last METAR seen in FlightGear
         self.sent_metar = None      # last METAR we sent to FlightGear
+        self.sent_state = None      # app weather at the moment we sent it
+        self.was_fg_mode = False    # Mode was FlightGear on the last tick
+        self.shown_state = None     # FlightGear values shown in the weather box
         self.synced_clouds = None   # Detailed Weather clouds already on the radar
         self.last_strike = None     # last lightning strike already applied
         self.notice = ("", 0.0)     # short message kept under the live status
@@ -127,14 +130,26 @@ class MainWindow(QMainWindow):
         f.addRow("Heading", self.sim_heading)
         f.addRow("Time speed-up", self.time_scale)
         panel.addWidget(sim)
+
+        here = QGroupBox("FlightGear weather (live)")
+        v = QVBoxLayout(here)
+        self.fg_wx = QLabel("Connect to FlightGear to see its weather")
+        self.fg_wx.setWordWrap(True)
+        self.fg_wx.setTextFormat(Qt.RichText)
+        v.addWidget(self.fg_wx)
+        panel.addWidget(here)
         panel.addStretch()
 
         left = QWidget()
         left.setLayout(panel)
-        left.setFixedWidth(300)
+        scroll = QScrollArea()
+        scroll.setWidget(left)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFixedWidth(320)
         root = QWidget()
         lay = QHBoxLayout(root)
-        lay.addWidget(left)
+        lay.addWidget(scroll)
         lay.addWidget(self.display, 1)
         self.setCentralWidget(root)
         self.resize(1100, 680)
@@ -177,6 +192,7 @@ class MainWindow(QMainWindow):
         try:
             self.fg.send_metar(metar)
             self.sent_metar = metar
+            self.sent_state = self._wx_state()
             self._notify("Weather sent to FlightGear")
         except OSError as exc:
             self._notify(f"Send failed: {exc}")
@@ -191,6 +207,80 @@ class MainWindow(QMainWindow):
         if msg and time.perf_counter() < until:
             text = f"{text}\n{msg}" if text else msg
         self.status.setText(text)
+
+    def _show_fg_weather(self, s):
+        """Fill the 'FlightGear weather' box with everything FlightGear reports."""
+        def level(v):
+            if v is None:
+                return "?"
+            if v <= 0.01:
+                return "none"
+            word = "light" if v < 0.35 else ("moderate" if v < 0.7 else "heavy")
+            return f"{word} ({v:.2f})"
+
+        def num(key, fmt, unit=""):
+            v = s.get(key)
+            return "?" if v is None else f"{v:{fmt}}{unit}"
+
+        def vis(key):
+            v = s.get(key)
+            if v is None:
+                return "?"
+            return f"{v / 1000:.1f} km" if v >= 1000 else f"{v:.0f} m"
+
+        rows = [("<b>At your plane</b>", ""),
+                ("Visibility", vis("vis_m")),
+                ("Rain", level(s.get("rain"))),
+                ("Snow", level(s.get("snow"))),
+                ("Turbulence", level(s.get("turb"))),
+                ("Temp / dew point", f"{num('temp_c', '.0f')} / {num('dew_c', '.0f')} °C"),
+                ("Humidity", num("rh", ".0f", " %")),
+                ("Pressure (sea level)", f"{num('qnh_inhg', '.2f')} inHg")]
+
+        if s.get("lw_code"):
+            def zone(key):
+                n = s.get(key)
+                return "?" if n is None else ("<b>YES</b>" if n > 0 else "no")
+
+            layers = []
+            for i in range(4):
+                octs, ft = s.get(f"layer{i}_oct"), s.get(f"layer{i}_ft")
+                if octs and ft is not None:
+                    layers.append(f"{octs:.0f}/8 at {ft:.0f} ft")
+            alt = s.get("cloud_alt_ft")
+            rows += [("<b>Detailed Weather</b>", ""),
+                     ("Weather type", s["lw_code"].replace("_", " ")),
+                     ("Station", s.get("station") or "?"),
+                     ("Thunderstorms at station", "yes" if s.get("stn_thunder") else "no"),
+                     ("Cloud layers", ", ".join(layers) or "none"),
+                     ("Storm clouds read", str(len(s.get("clouds") or {}))),
+                     ("Their altitude", "?" if not alt else
+                      (f"{alt[0]:.0f} ft" if alt[0] == alt[1]
+                       else f"{alt[0]:.0f} - {alt[1]:.0f} ft")),
+                     ("Area visibility", vis("area_vis_m")),
+                     ("Area rain", level(s.get("area_rain"))),
+                     ("Area snow", level(s.get("area_snow"))),
+                     ("Area turbulence", level(s.get("area_turb"))),
+                     ("Thermal lift", num("area_lift", ".0f")),
+                     ("Weather zones", num("zones", ".0f")),
+                     ("Inside a rain zone", zone("in_rain")),
+                     ("Inside a snow zone", zone("in_snow")),
+                     ("Inside a turbulence zone", zone("in_turb")),
+                     ("Inside a low-visibility zone", zone("in_vis")),
+                     ("Inside a lift zone", zone("in_lift"))]
+            if s.get("strike_lat"):
+                rows.append(("Last lightning", f"{num('strike_alt', '.0f')} ft, "
+                             f"{s['strike_lat']:.3f}, {s['strike_lon']:.3f}"))
+        else:
+            rows.append(("<i>Detailed Weather is off: no zones, layers or "
+                         "cloud positions</i>", ""))
+
+        html = "".join(f"<tr><td>{a}</td><td>{b}</td></tr>" for a, b in rows)
+        self.fg_wx.setText(f"<table cellspacing='2'>{html}</table>")
+
+    def _wx_state(self):
+        """What the app's weather looks like: same storms, scenario and strength."""
+        return (self.weather.generation, self.weather.scenario, self.intensity.value())
 
     def save_image(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save radar image",
@@ -221,6 +311,9 @@ class MainWindow(QMainWindow):
             self.regenerate()
         self.ax, self.ay = self._to_nm(s["lat"], s["lon"])
         self.heading = s["heading"]
+        if s is not self.shown_state:   # new values from FlightGear
+            self.shown_state = s
+            self._show_fg_weather(s)
         self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft")
         if not follow_weather:
             return True
@@ -235,11 +328,15 @@ class MainWindow(QMainWindow):
         if s.get("lw_code") and s.get("clouds"):
             self._update_detailed_weather(s)
             return True
-        if s.get("lw_code"):
+        if s.get("lw_code") and s.get("lw_selected"):
             # Detailed Weather chosen but its engine made no clouds (not started
-            # with Apply, or the tile code is left over): fall back to the METAR.
+            # with Apply): fall back to the METAR.
             self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
                              "Detailed Weather has no clouds: using METAR")
+        else:
+            # Basic Weather (or a tile code left over from earlier).
+            self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
+                             "Basic Weather: storms drawn from the METAR")
 
         # Basic Weather: no positions, so build storms that match the METAR.
         # Weather changed inside FlightGear (not by our Send): show it on the radar.
@@ -252,7 +349,12 @@ class MainWindow(QMainWindow):
         elif metar and metar != self.fg_metar:
             self.fg_metar = metar
             parsed = parse_metar(metar)
-            if parsed and metar != self.sent_metar:
+            # Keep our storms if FlightGear still has the weather we sent (the
+            # text may be stored a little differently) and we did not change them.
+            ours = (self.sent_metar is not None
+                    and parsed == parse_metar(self.sent_metar)
+                    and self.sent_state == self._wx_state())
+            if parsed and not ours:
                 self._apply_fg_weather(*parsed)
         return True
 
@@ -298,6 +400,11 @@ class MainWindow(QMainWindow):
         # While connected the aircraft always follows FlightGear. The Mode only
         # decides where the weather comes from: FlightGear, or the app (to Send).
         fg_mode = self.source.currentText() == "FlightGear"
+        if fg_mode and not self.was_fg_mode:
+            # Back in FlightGear mode: read FlightGear's weather again, so edits
+            # made in Simulated mode (and not sent) leave the radar.
+            self.fg_metar = None
+        self.was_fg_mode = fg_mode
         fg_live = self._update_from_fg(follow_weather=fg_mode)
         fg_weather = fg_live and fg_mode
         fg_wind = fg_weather and "wind_from" in self.fg.state
