@@ -25,6 +25,8 @@ It works on its own with simulated flight, and can connect to FlightGear.
 
        --telnet=5401 --disable-real-weather-fetch
 
+   Load/run `wxradar_export.nas` once in FlightGear. It refreshes the exported
+   weather-volume properties every 2 s while FlightGear is running.
 2. In the app, click "Connect to FlightGear". The radar now follows the
    aircraft's position and heading.
 3. While connected in FlightGear mode, the radar follows FlightGear's weather
@@ -32,14 +34,20 @@ It works on its own with simulated flight, and can connect to FlightGear.
    - Wind always comes from FlightGear (the wind sliders are locked).
    - Scenario, storm strength, coverage and "Regenerate storms" are locked.
      If the METAR changes inside FlightGear, they update to match it.
-   - With **Basic Weather**, FlightGear gives no storm positions, so the app
-     builds storms that match the METAR (right type, invented places).
-   - With **Detailed Weather** running, the app reads FlightGear's cloud
-     positions (`/local-weather/clouds/...`) every 10 s and puts an echo on
-     each cloud, strength from the weather type (`/local-weather/tiles/code`).
-     Lightning strikes (`/local-weather/lightning`) turn the nearest cloud
-     into a red storm core with turbulence. The app moves the echoes with
-     FlightGear's wind.
+   - FlightGear's exported weather volumes (`/wxradar/volumes`) are checked
+     every 2 s in either weather mode. Rain is green/yellow/red, snow is cyan,
+     mixed rain and snow is white, and strong turbulence can be magenta in TURB
+     mode. This requires `wxradar_export.nas` to keep the volume properties
+     updated; the radar only draws areas FlightGear exports as spatial volumes.
+   - If no volumes are exported, **Basic Weather** falls back to approximate
+     echoes derived from the METAR (not FlightGear's exact weather locations).
+     The live FlightGear panel still shows available conditions at the aircraft.
+   - If no volumes are exported and **Detailed Weather** is running, the app
+     reads FlightGear's cloud positions (`/local-weather/clouds/...`) every
+     10 s and puts an echo on each cloud, strength from the weather type
+     (`/local-weather/tiles/code`). Lightning strikes
+     (`/local-weather/lightning`) turn the nearest cloud into a red storm core
+     with turbulence. The app moves the echoes with FlightGear's wind.
 4. To set FlightGear's weather from the app, switch Mode to "Simulated"
    while still connected, set up the weather, and click
    "Send weather to FlightGear" (only enabled in that case). The aircraft

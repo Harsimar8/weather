@@ -74,8 +74,37 @@ LAYER_PROPS = {f"layer{i}_{k}": LW_LAYER.format(i=i, name=n)
                for k, n in (("oct", "cover-oct"), ("ft", "alt-agl-ft"))}
 NUMBER_PROPS = {**HERE_PROPS, **LW_EXTRA_PROPS, **LAYER_PROPS}
 CLOUD_POLL_S = 10.0   # cloud positions do not change, so read them now and then
+WEATHER_VOLUME_POLL_S = 2.0
 CLOUD_CHUNK = 25      # clouds asked for in one go
 MAX_TILES = 20        # newest cloud tiles to look at
+# FlightGear live weather volumes exported by wxradar_export.nas
+WX_VOLUME_COUNT = "/wxradar/volumes/count"
+
+WX_VOLUME_FIELDS = (
+    "geometry",
+    "latitude-deg",
+    "longitude-deg",
+    "r1-m",
+    "r2-m",
+    "heading-deg",
+    "base-altitude-ft",
+    "top-altitude-ft",
+    "visibility",
+    "rain",
+    "snow",
+    "turbulence",
+    "lift",
+    "rain-flag",
+    "snow-flag",
+    "turbulence-flag",
+    "visibility-flag",
+    "lift-flag",
+    "saturation",
+    "saturation-flag",
+    "valid",
+)
+
+
 
 FAST_PROPS = {**POSITION_PROPS, **WIND_PROPS, **LIGHTNING_PROPS,
               "metar": METAR_PROPERTY, "lw_code": LW_CODE,
@@ -99,6 +128,7 @@ class FGLink:
         self.reader = None
         self.lock = threading.Lock()
         self.state = {}
+        self.weather_volumes = []
         self.clouds = {}
         self.cloud_alt_ft = None    # (lowest, highest) Detailed Weather cloud
         self.connected = False
@@ -162,6 +192,7 @@ class FGLink:
     # ------------------------------------------------------------ polling
     def _poll_loop(self):
         next_clouds = 0.0
+        next_weather_volumes = 0.0
         while not self._stop.is_set():
             try:
                 raw = dict(zip(FAST_PROPS, self.get_many(FAST_PROPS.values())))
@@ -181,8 +212,14 @@ class FGLink:
                 if code and time.monotonic() >= next_clouds:
                     self.clouds = self._read_clouds(int(_num(raw["lw_tiles"]) or 0))
                     next_clouds = time.monotonic() + CLOUD_POLL_S
+
+                if time.monotonic() >= next_weather_volumes:
+                    self.weather_volumes = self._read_weather_volumes()
+                    next_weather_volumes = time.monotonic() + WEATHER_VOLUME_POLL_S
+
                 new["clouds"] = self.clouds if code else {}
                 new["cloud_alt_ft"] = self.cloud_alt_ft if code else None
+                new["weather_volumes"] = self.weather_volumes
                 self.state = new
             except (OSError, ValueError) as exc:
                 self.error = str(exc) or exc.__class__.__name__
@@ -221,6 +258,29 @@ class FGLink:
                 start += CLOUD_CHUNK
         self.cloud_alt_ft = (min(alts), max(alts)) if alts else None
         return clouds
+    def _read_weather_volumes(self):
+        """Read live weather volumes exported by FlightGear."""
+
+        count_text = self.get(WX_VOLUME_COUNT)
+        count = int(_num(count_text) or 0)
+
+        volumes = []
+
+        for i in range(count):
+            paths = [
+                f"/wxradar/volumes/volume[{i}]/{field}"
+                for field in WX_VOLUME_FIELDS
+            ]
+
+            values = self.get_many(paths)
+            volume = {
+                field: _num(value)
+                for field, value in zip(WX_VOLUME_FIELDS, values)
+            }
+
+            volumes.append(volume)
+
+        return volumes
 
     def send_metar(self, metar):
         self.set(METAR_PROPERTY, metar)

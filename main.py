@@ -15,8 +15,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog,
 from display import RadarDisplay
 from fg_link import FGLink
 from radar import RadarScanner
-from weather import SCENARIOS, WeatherModel, parse_metar
-
+from weather import SCENARIOS, WeatherModel, FlightGearWeather, parse_metar
 SIM_SPEED_KT = 250.0
 
 
@@ -32,6 +31,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Weather Radar")
         self.weather = WeatherModel()
+        self.fg_weather = FlightGearWeather()
         self.scanner = RadarScanner()
         self.display = RadarDisplay(self.scanner)
         self.fg = None
@@ -229,10 +229,17 @@ class MainWindow(QMainWindow):
             return f"{v / 1000:.1f} km" if v >= 1000 else f"{v:.0f} m"
 
         rows = [("<b>At your plane</b>", ""),
+                ("Weather mode", "Detailed Weather" if s.get("lw_selected")
+                 else "Basic Weather"),
+                ("METAR", s.get("metar") or "?"),
+                ("Radar weather volumes", str(
+                    len(s.get("weather_volumes") or []))),
                 ("Visibility", vis("vis_m")),
                 ("Rain", level(s.get("rain"))),
                 ("Snow", level(s.get("snow"))),
                 ("Turbulence", level(s.get("turb"))),
+                ("Wind", f"{num('wind_from', '.0f')}° from, "
+                 f"{num('wind_kt', '.0f')} kt"),
                 ("Temp / dew point", f"{num('temp_c', '.0f')} / {num('dew_c', '.0f')} °C"),
                 ("Humidity", num("rh", ".0f", " %")),
                 ("Pressure (sea level)", f"{num('qnh_inhg', '.2f')} inHg")]
@@ -290,10 +297,23 @@ class MainWindow(QMainWindow):
 
     # --------------------------------------------------------------- loop
     def _scan(self):
+        scan_weather = self.weather
+
+        if (
+            self.source.currentText() == "FlightGear"
+            and self.fg
+            and self.fg.connected
+            and self.fg_weather.volumes
+        ):
+            scan_weather = self.fg_weather
+
         return self.scanner.scan(
-            self.weather, self.ax, self.ay, self.heading,
-            float(self.range.currentText()), gain=self.gain.value() / 100,
-            attenuation=self.atten.isChecked(), turb_mode=self.turb.isChecked())
+            scan_weather, self.ax, self.ay, self.heading,
+            float(self.range.currentText()),
+            gain=self.gain.value() / 100,
+            attenuation=self.atten.isChecked(),
+            turb_mode=self.turb.isChecked()
+        )
 
     def _update_from_fg(self, follow_weather=True):
         """Position always follows FlightGear; wind and METAR only if follow_weather."""
@@ -311,6 +331,11 @@ class MainWindow(QMainWindow):
             self.regenerate()
         self.ax, self.ay = self._to_nm(s["lat"], s["lon"])
         self.heading = s["heading"]
+        self.fg_weather.update(
+            s.get("weather_volumes", []),
+            self.origin,
+            s.get("alt_ft", 0.0)
+        )
         if s is not self.shown_state:   # new values from FlightGear
             self.shown_state = s
             self._show_fg_weather(s)
@@ -331,8 +356,16 @@ class MainWindow(QMainWindow):
         if s.get("lw_code") and s.get("lw_selected"):
             # Detailed Weather chosen but its engine made no clouds (not started
             # with Apply): fall back to the METAR.
+            if self.fg_weather.volumes:
+                status = (f"FlightGear radar volumes: "
+                          f"{len(self.fg_weather.volumes)}")
+            else:
+                status = "Detailed Weather has no clouds: using METAR"
+            self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n{status}")
+        elif self.fg_weather.volumes:
             self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
-                             "Detailed Weather has no clouds: using METAR")
+                             f"FlightGear radar volumes: "
+                             f"{len(self.fg_weather.volumes)}")
         else:
             # Basic Weather (or a tile code left over from earlier).
             self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
@@ -376,8 +409,12 @@ class MainWindow(QMainWindow):
             self.last_strike = strike
             self.weather.strike(*self._to_nm(*strike))
         self.intensity.setValue(100)
-        self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
-                         f"Detailed Weather: {len(clouds)} clouds ({code})")
+        radar_source = (
+            f"FlightGear radar volumes: {len(self.fg_weather.volumes)}"
+            if self.fg_weather.volumes
+            else f"Detailed Weather: {len(clouds)} cloud echoes ({code})"
+        )
+        self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n{radar_source}")
 
     def _apply_fg_weather(self, scenario, intensity, coverage):
         self.scenario.blockSignals(True)

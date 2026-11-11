@@ -134,9 +134,12 @@ class RadarDisplay(QWidget):
         g = self.info["gain"]
         p.setPen(QColor(0, 210, 0))
         p.drawText(10, 20, "WXR  GAIN " + ("CAL" if abs(g - 1) < 0.01 else f"{g:.2f}"))
+        p.setFont(QFont("Arial", 8))
+        p.setPen(QColor(210, 210, 210))
+        p.drawText(10, 38, "RAIN G/Y/R   SNOW CYAN   MIXED WHITE")
         if self.info["turb"]:
             p.setPen(QColor(225, 0, 225))
-            p.drawText(10, 38, "TURB")
+            p.drawText(10, 53, "TURB")
         p.setPen(QColor(77, 208, 225))
         p.drawText(QRectF(W - 210, 6, 200, 18), Qt.AlignRight,
                    f"RNG {rng} NM   HDG {int(round(hdg)) % 360:03d}")

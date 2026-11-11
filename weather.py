@@ -236,3 +236,111 @@ def parse_metar(metar):
     else:
         intensity = 1.0 if "TS" in rain else 0.9
     return scenario, intensity, coverage
+
+
+
+
+class FlightGearWeather:
+    """Convert FlightGear weather volumes into radar reflectivity."""
+
+    def __init__(self):
+        self.volumes = []
+        self.origin = None
+        self.altitude_ft = 0.0
+
+    def update(self, volumes, origin, altitude_ft):
+        """Update live volumes and aircraft position."""
+        self.origin = origin
+        self.altitude_ft = altitude_ft
+        self.volumes = []
+
+        if origin is None:
+            return
+
+        lat0, lon0 = origin
+
+        for v in volumes:
+            lat = v.get("latitude-deg")
+            lon = v.get("longitude-deg")
+
+            if lat is None or lon is None:
+                continue
+
+            # Convert volume centre to NM from aircraft reference origin.
+            cx = (lon - lon0) * 60.0 * math.cos(math.radians(lat0))
+            cy = (lat - lat0) * 60.0
+
+            self.volumes.append({
+                "data": v,
+                "x": cx,
+                "y": cy,
+                "r1": (v.get("r1-m") or 0) / 1852.0,
+                "r2": (v.get("r2-m") or 0) / 1852.0,
+                "angle": math.radians(v.get("heading-deg") or 0),
+            })
+
+    def precipitation_field(self, X, Y):
+        """Return rain, snow, and turbulence arrays for the weather volumes."""
+        rain_refl = np.zeros_like(X, dtype=float)
+        snow_refl = np.zeros_like(X, dtype=float)
+        turb = np.zeros_like(X, dtype=float)
+
+        for item in self.volumes:
+            v = item["data"]
+
+            # Ignore volumes outside the aircraft's current altitude.
+            base = v.get("base-altitude-ft")
+            top = v.get("top-altitude-ft")
+
+            if base is None or top is None:
+                continue
+
+            if not (base <= self.altitude_ft <= top):
+                continue
+
+            dx = X - item["x"]
+            dy = Y - item["y"]
+
+            r1 = item["r1"]
+            r2 = item["r2"]
+            angle = item["angle"]
+            geometry = int(v.get("geometry") or 0)
+
+            # Rotate points into the weather volume's local coordinates.
+            u = dx * math.cos(angle) - dy * math.sin(angle)
+            w = dx * math.sin(angle) + dy * math.cos(angle)
+
+            if geometry == 1:
+                inside = (dx * dx + dy * dy) <= r1 * r1
+            elif geometry == 2:
+                if r1 <= 0 or r2 <= 0:
+                    continue
+                inside = (u / r1) ** 2 + (w / r2) ** 2 <= 1.0
+            elif geometry == 3:
+                inside = (np.abs(u) <= r1) & (np.abs(w) <= r2)
+            else:
+                continue
+
+            # FlightGear rain intensity is not measured dBZ.
+            if v.get("rain-flag") == 1:
+                rain = max(0.0, min(1.0, v.get("rain") or 0.0))
+                rain_refl = np.maximum(
+                    rain_refl, inside * (0.15 + 1.05 * rain))
+
+            if v.get("snow-flag") == 1:
+                snow = max(0.0, min(1.0, v.get("snow") or 0.0))
+                snow_refl = np.maximum(
+                    snow_refl, inside * (0.15 + 0.65 * snow))
+
+            if v.get("turbulence-flag") == 1:
+                strength = max(
+                    0.0, min(1.0, v.get("turbulence") or 0.0)
+                )
+                turb = np.maximum(turb, inside * strength)
+
+        return rain_refl, snow_refl, turb
+
+    def field(self, X, Y):
+        """Return combined reflectivity and turbulence for existing callers."""
+        rain, snow, turb = self.precipitation_field(X, Y)
+        return np.maximum(rain, snow), turb
