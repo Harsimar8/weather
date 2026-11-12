@@ -3,6 +3,7 @@
 Coordinates are in nautical miles (NM): x = east, y = north.
 """
 import math
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -74,6 +75,12 @@ class WeatherModel:
         self.time = 0.0
         self.drift = np.zeros(2)
         self.generation = 0    # goes up each time new storms are made
+        self.precip = "Rain"   # what falls: one of PRECIP_KINDS
+
+    @property
+    def precip_mult(self):
+        """(rain, snow) share of each storm's strength, for the radar."""
+        return PRECIP_MULT.get(self.precip, (1.0, 0.0))
 
     # ------------------------------------------------------------ scenarios
     def generate(self, scenario, ax, ay, heading):
@@ -115,6 +122,12 @@ class WeatherModel:
             add(11, 33, 2, 2, 0, 0.9, 1.0)      # hook curling round
             add(13, 30, 1.8, 1.8, 0, 0.8, 1.0)
             add(11, 27.5, 1.6, 1.6, 0, 0.7, 0.0)
+
+    def add_microburst(self, ax, ay, heading, ahead=3.5):
+        """A small, violent storm cell (downburst) ahead: for testing the PWS."""
+        h = math.radians(heading)
+        self.cells.append(Cell(ax + ahead * math.sin(h), ay + ahead * math.cos(h),
+                               1.3, 1.1, 0.0, 1.45, 1.0, phase=0.0, rate=0.0))
 
     def sync_clouds(self, clouds, code):
         """Put a cell on each Detailed Weather cloud from FlightGear.
@@ -196,46 +209,76 @@ class WeatherModel:
         else:
             stormy = any(c.turb > 0 for c in self.cells) and self.intensity > 0.8
             i = self.intensity
-            rain = "-RA" if i < 0.7 else ("RA" if i < 1.1 else "+RA")
+            code = PRECIP_CODE.get(self.precip, "RA")
+            sign = "-" if i < 0.7 else ("" if i < 1.1 else "+")
+            rain = sign + code
             if stormy:
-                rain = ("+TSRA" if i >= 1.1 else "TSRA")
+                rain = ("+" if i >= 1.1 else "") + "TS" + code
             vis = "8000" if i < 0.7 else ("4000" if i < 1.1 else "2000")
+            if self.precip != "Rain":
+                vis = "3000" if i < 0.7 else ("1500" if i < 1.1 else "0800")
             clouds = "BKN020 OVC080"
             if stormy:
                 clouds = "FEW025CB BKN030 OVC080"
             parts = [vis, rain, clouds]
-        return " ".join(["XXXX", stamp, wind, *parts, "18/15", "Q1008"])
+        # Snow needs cold air: send a temperature that matches.
+        temps = {"Snow": "M03/M05", "Rain and snow": "01/M01"}.get(self.precip, "18/15")
+        return " ".join(["XXXX", stamp, wind, *parts, temps, "Q1008"])
 
 
 COVER = {"FEW": 0.5, "SCT": 0.8, "BKN": 1.0, "OVC": 1.3}
 
+# What falls from the storms. Snow echoes much weaker than rain (about 0.62
+# of the strength, the same ratio FlightGear volumes get); mixed rain and snow
+# shows both, each a bit weaker.
+PRECIP_KINDS = ["Rain", "Snow", "Rain and snow"]
+PRECIP_MULT = {"Rain": (1.0, 0.0), "Snow": (0.0, 0.62), "Rain and snow": (0.6, 0.6)}
+PRECIP_CODE = {"Rain": "RA", "Snow": "SN", "Rain and snow": "RASN"}
+
+
+# A METAR weather group: intensity, descriptor, then precipitation codes.
+# e.g. -RA, +SHSN, TSRA, RASN, -SG, TS. A whole group must match, so station
+# names (KSNA) or recent weather (RERA) are not mistaken for weather.
+WX_GROUP = re.compile(r"^(\+|-|VC)?(MI|PR|BC|DR|BL|SH|TS|FZ)?((?:DZ|RA|SN|SG|PL|GR|GS|IC|UP)*)$")
+SNOW_CODES = ("SN", "SG")                    # snow, snow grains
+RAIN_CODES = ("RA", "DZ", "GR", "GS", "PL")  # rain, drizzle, hail, ice pellets
+
 
 def parse_metar(metar):
-    """Turn a METAR from FlightGear into (scenario, intensity, coverage).
+    """Turn a METAR into (scenario, intensity, coverage, precipitation type).
 
     The reverse of WeatherModel.to_metar. Returns None if there is nothing to read.
     """
     tokens = metar.split()
     if len(tokens) < 3:
         return None
-    rain = next((t for t in tokens if any(w in t for w in ("TS", "RA", "SH", "DZ"))
-                 and not t.startswith("RE")), "")
+    groups = []                              # (intensity sign, descriptor, codes)
+    for t in tokens[2:]:                     # skip station and time
+        m = WX_GROUP.match(t)
+        if m and (m.group(3) or m.group(2) == "TS"):
+            groups.append((m.group(1) or "", m.group(2) or "", m.group(3)))
+    codes = "".join(g[2] for g in groups)
+    snow = any(c in codes for c in SNOW_CODES)
+    rain = any(c in codes for c in RAIN_CODES)
+    thunder = any(g[1] == "TS" for g in groups)
     clouds = [t for t in tokens if t[:3] in COVER]
     cb = any(t.endswith(("CB", "TCU")) for t in clouds)
     coverage = max((COVER[t[:3]] for t in clouds), default=0.5)
-    if "TS" in rain or cb:
+    kind = "Rain and snow" if (snow and rain) else ("Snow" if snow else "Rain")
+    if thunder or cb:
         scenario = "Scattered Cb"
-    elif rain:
+    elif snow or rain:
         scenario = "Embedded cell in rain"
     else:
-        return "Clear", 0.3, coverage
-    if rain.startswith("+"):
+        return "Clear", 0.3, coverage, "Rain"
+    sign = next((g[0] for g in groups if g[2]), "")
+    if sign == "+":
         intensity = 1.3
-    elif rain.startswith("-"):
+    elif sign == "-":
         intensity = 0.5
     else:
-        intensity = 1.0 if "TS" in rain else 0.9
-    return scenario, intensity, coverage
+        intensity = 1.0 if thunder else 0.9
+    return scenario, intensity, coverage, kind
 
 
 
@@ -279,8 +322,12 @@ class FlightGearWeather:
                 "angle": math.radians(v.get("heading-deg") or 0),
             })
 
-    def precipitation_field(self, X, Y):
-        """Return rain, snow, and turbulence arrays for the weather volumes."""
+    def precipitation_field(self, X, Y, H=None):
+        """Return rain, snow, and turbulence arrays for the weather volumes.
+
+        H is the height (ft) of each point, for example where the radar beam
+        is. Without it the aircraft's own altitude is used everywhere.
+        """
         rain_refl = np.zeros_like(X, dtype=float)
         snow_refl = np.zeros_like(X, dtype=float)
         turb = np.zeros_like(X, dtype=float)
@@ -288,15 +335,21 @@ class FlightGearWeather:
         for item in self.volumes:
             v = item["data"]
 
-            # Ignore volumes outside the aircraft's current altitude.
+            # Only the part of a volume at the beam's height gives an echo.
             base = v.get("base-altitude-ft")
             top = v.get("top-altitude-ft")
 
             if base is None or top is None:
                 continue
 
-            if not (base <= self.altitude_ft <= top):
-                continue
+            if H is None:
+                if not (base <= self.altitude_ft <= top):
+                    continue
+                in_height = True
+            else:
+                in_height = (H >= base) & (H <= top)
+                if not np.any(in_height):
+                    continue
 
             dx = X - item["x"]
             dy = Y - item["y"]
@@ -320,6 +373,7 @@ class FlightGearWeather:
                 inside = (np.abs(u) <= r1) & (np.abs(w) <= r2)
             else:
                 continue
+            inside = inside & in_height
 
             # FlightGear rain intensity is not measured dBZ.
             if v.get("rain-flag") == 1:

@@ -27,9 +27,10 @@ WIND_PROPS = {
 # Detailed Weather (Advanced Weather) publishes its weather type, its cloud
 # positions and the latest lightning strike. Basic Weather leaves these empty.
 LW_CODE = "/local-weather/tiles/code"
-# Weather engine chosen in the Weather dialog ('1' = Detailed Weather). The
+# Detailed Weather on/off: the flag FlightGear's own Weather dialog trusts. It
+# turns true on Apply (the dialog's radio buttons change before Apply). The
 # old tile code stays in the tree after switching back to Basic Weather.
-LW_MODE = "/sim/gui/dialogs/metar/mode/local-weather"
+LW_MODE = "/nasal/local_weather/enabled"     # true only while Detailed Weather runs
 LW_TILE_COUNTER = "/local-weather/tiles/tile-counter"
 LW_CLOUD = "/local-weather/clouds/tile[{t}]/cloud[{c}]/position/{name}"
 LIGHTNING_PROPS = {
@@ -47,7 +48,35 @@ HERE_PROPS = {
     "dew_c": "/environment/dewpoint-degc",
     "rh": "/environment/relative-humidity",
     "qnh_inhg": "/environment/pressure-sea-level-inhg",
+    "ground_ft": "/position/ground-elev-ft",  # terrain under the aircraft
+    "gs_kt": "/velocities/groundspeed-kt",
+    "tas_kt": "/instrumentation/airspeed-indicator/true-speed-kt",
+    "hdg_mag": "/orientation/heading-magnetic-deg",
+    "speed_up": "/sim/speed-up",             # time acceleration (1 = normal)
+    "v_north_fps": "/velocities/speed-north-fps",   # ground track comes from these
+    "v_east_fps": "/velocities/speed-east-fps",
+    "vs_fps": "/velocities/vertical-speed-fps",     # climbing or descending (PWS)
+    "hdg_bug": "/autopilot/settings/heading-bug-deg",  # selected heading (magnetic)
 }
+FROZEN = "/sim/freeze/master"                # true while FlightGear is paused
+
+# Basic Weather settings (the Manual Configuration dialog uses the same ones;
+# FlightGear also fills them from the METAR). Read every few seconds.
+MANUAL = "/sim/gui/dialogs/metar/mode/manual-weather"
+CLOUD_LAYERS, ALOFT, BOUNDARY = 5, 5, 2
+CFG_PROPS = {"manual": MANUAL}
+for _i in range(CLOUD_LAYERS):
+    for _k, _n in (("cov", "coverage"), ("ft", "elevation-ft"), ("thick", "thickness-ft")):
+        CFG_PROPS[f"cloud{_i}_{_k}"] = f"/environment/clouds/layer[{_i}]/{_n}"
+for _where, _count in (("aloft", ALOFT), ("boundary", BOUNDARY)):
+    for _i in range(_count):
+        for _k, _n in (("ft", "elevation-ft"), ("temp", "temperature-degc"),
+                       ("turb", "turbulence/magnitude-norm")):
+            CFG_PROPS[f"{_where}{_i}_{_k}"] = f"/environment/config/{_where}/entry[{_i}]/{_n}"
+SLOW_POLL_S = 2.0
+
+# Terrain grid made by wxradar_export.nas: "lat,lon,spacing,n|elev,...|water"
+TERRAIN_DATA = "/wxradar/terrain/data"
 
 # Detailed Weather only: the weather of the area, the rain/snow/turbulence
 # zones the aircraft is inside, the weather station and its cloud layers.
@@ -107,7 +136,7 @@ WX_VOLUME_FIELDS = (
 
 
 FAST_PROPS = {**POSITION_PROPS, **WIND_PROPS, **LIGHTNING_PROPS,
-              "metar": METAR_PROPERTY, "lw_code": LW_CODE,
+              "metar": METAR_PROPERTY, "lw_code": LW_CODE, "frozen": FROZEN,
               "lw_mode": LW_MODE, "lw_tiles": LW_TILE_COUNTER,
               "station": LW_STATION, **NUMBER_PROPS}
 
@@ -120,7 +149,35 @@ def _num(text):
         return None
 
 
+def _flag(text):
+    return text.strip().lower() in ("1", "true")
+
+
+def _parse_cfg(raw):
+    """Basic Weather settings as plain lists."""
+    clouds = []
+    for i in range(CLOUD_LAYERS):
+        cov = raw[f"cloud{i}_cov"].strip().lower()
+        ft, thick = _num(raw[f"cloud{i}_ft"]), _num(raw[f"cloud{i}_thick"])
+        if cov and ft is not None and ft > -9000:
+            clouds.append((cov, ft, thick or 0.0))
+    table = {}
+    for where, count in (("aloft", ALOFT), ("boundary", BOUNDARY)):
+        rows = []
+        for i in range(count):
+            ft = _num(raw[f"{where}{i}_ft"])
+            if ft is not None:
+                rows.append((ft, _num(raw[f"{where}{i}_temp"]),
+                             _num(raw[f"{where}{i}_turb"]) or 0.0))
+        table[where] = rows
+    return {"manual": _flag(raw["manual"]), "clouds": clouds, **table}
+
+
 class FGLink:
+    TIMEOUT_S = 10.0      # FlightGear can freeze for seconds (Apply, scenery)
+    RETRY_S = 2.0         # wait between reconnect attempts
+    BATCH = 400           # properties asked for in one go
+
     def __init__(self, host="localhost", port=5401, poll_hz=5.0):
         self.host, self.port = host, port
         self.poll_interval = 1.0 / poll_hz
@@ -129,19 +186,37 @@ class FGLink:
         self.lock = threading.Lock()
         self.state = {}
         self.weather_volumes = []
+        self.cfg = None             # Basic Weather settings
+        self.terrain = None         # terrain grid text from wxradar_export.nas
         self.clouds = {}
         self.cloud_alt_ft = None    # (lowest, highest) Detailed Weather cloud
         self.connected = False
+        self.reconnecting = False
+        self.reconnects = 0
         self.error = ""
         self._thread = None
         self._stop = threading.Event()
 
     # ------------------------------------------------------------ connect
+    def _open(self):
+        with self.lock:
+            sock = socket.create_connection((self.host, self.port), timeout=5)
+            sock.settimeout(self.TIMEOUT_S)
+            self.sock = sock
+            self.reader = sock.makefile("r", encoding="utf-8", newline="\n")
+            self._send("data")  # raw mode: replies are just the value
+
+    def _shut(self):
+        with self.lock:
+            try:
+                if self.sock:
+                    self.sock.close()
+            except OSError:
+                pass
+            self.sock = None
+
     def connect(self):
-        self.sock = socket.create_connection((self.host, self.port), timeout=3)
-        self.sock.settimeout(2)
-        self.reader = self.sock.makefile("r", encoding="utf-8", newline="\n")
-        self._send("data")  # raw mode: replies are just the value
+        self._open()
         self.connected = True
         self.error = ""
         self._stop.clear()
@@ -151,13 +226,29 @@ class FGLink:
     def close(self):
         self._stop.set()
         self.connected = False
+        self.reconnecting = False
         try:
             if self.sock:
                 self._send("quit")
-                self.sock.close()
         except OSError:
             pass
-        self.sock = None
+        self._shut()
+
+    def _reconnect(self, exc):
+        """Connection broke: keep trying until it works or close() is called."""
+        self.connected = False
+        self.reconnecting = True
+        self.error = str(exc) or exc.__class__.__name__
+        self._shut()
+        while not self._stop.wait(self.RETRY_S):
+            try:
+                self._open()
+            except OSError:
+                continue
+            self.connected = True
+            self.reconnecting = False
+            self.reconnects += 1
+            return
 
     # ------------------------------------------------------- low level I/O
     def _send(self, line):
@@ -172,60 +263,91 @@ class FGLink:
         except (BlockingIOError, OSError):
             pass
         finally:
-            self.sock.settimeout(2)
+            self.sock.settimeout(self.TIMEOUT_S)
 
     def get_many(self, paths):
-        """Ask for several properties at once: one reply line per path, in order."""
+        """Ask for several properties: one reply line per path, in order."""
+        paths = list(paths)
+        out = []
         with self.lock:
-            self.sock.sendall("".join(f"get {p}\r\n" for p in paths).encode("utf-8"))
-            return [self.reader.readline().strip() for _ in paths]
+            if not self.sock:
+                raise OSError("not connected")
+            for k in range(0, len(paths), self.BATCH):
+                chunk = paths[k:k + self.BATCH]
+                self.sock.sendall("".join(f"get {p}\r\n" for p in chunk).encode("utf-8"))
+                out += [self.reader.readline().strip() for _ in chunk]
+        return out
 
     def get(self, path):
         return self.get_many([path])[0]
 
     def set(self, path, value):
         with self.lock:
+            if not self.sock:
+                raise OSError("not connected")
             self._send(f"set {path} {value}")
             time.sleep(0.05)
             self._drain()
 
     # ------------------------------------------------------------ polling
     def _poll_loop(self):
-        next_clouds = 0.0
-        next_weather_volumes = 0.0
+        bad = 0                     # bad replies in a row
+        self._next_clouds = self._next_slow = 0.0
         while not self._stop.is_set():
             try:
-                raw = dict(zip(FAST_PROPS, self.get_many(FAST_PROPS.values())))
-                new = {k: float(raw[k]) for k in POSITION_PROPS}
-                for k in (*WIND_PROPS, *LIGHTNING_PROPS, *NUMBER_PROPS):
-                    value = _num(raw[k])
-                    if value is not None:  # missing in this FlightGear version
-                        new[k] = value
-                new["metar"] = raw["metar"]
-                new["station"] = raw["station"]
-                # Missing mode property (other versions): trust the tile code.
-                detailed = raw["lw_mode"] in ("1", "true", "")
-                code = raw["lw_code"] if detailed else ""
-                new["lw_code"] = code
-                # True only when FlightGear clearly says Detailed Weather is chosen.
-                new["lw_selected"] = raw["lw_mode"] in ("1", "true")
-                if code and time.monotonic() >= next_clouds:
-                    self.clouds = self._read_clouds(int(_num(raw["lw_tiles"]) or 0))
-                    next_clouds = time.monotonic() + CLOUD_POLL_S
+                self._poll_once()
+                bad = 0
+            except ValueError as exc:
+                # One odd reply (e.g. during a reset) is skipped. Several in a
+                # row mean the replies are out of step: start a fresh link.
+                bad += 1
+                self.error = str(exc)
+                if bad >= 3:
+                    bad = 0
+                    self._reconnect(exc)
+            except Exception as exc:    # socket trouble or anything unexpected
+                if self._stop.is_set():
+                    break               # we are closing: not an error
+                # Never let the reading thread die: start a fresh link instead.
+                self._reconnect(exc if isinstance(exc, OSError)
+                                else OSError(f"{exc.__class__.__name__}: {exc}"))
+            self._stop.wait(self.poll_interval)
 
-                if time.monotonic() >= next_weather_volumes:
-                    self.weather_volumes = self._read_weather_volumes()
-                    next_weather_volumes = time.monotonic() + WEATHER_VOLUME_POLL_S
+    def _poll_once(self):
+        raw = dict(zip(FAST_PROPS, self.get_many(FAST_PROPS.values())))
+        new = {k: float(raw[k]) for k in POSITION_PROPS}
+        for k in (*WIND_PROPS, *LIGHTNING_PROPS, *NUMBER_PROPS):
+            value = _num(raw[k])
+            if value is not None:  # missing in this FlightGear version
+                new[k] = value
+        new["metar"] = raw["metar"]
+        new["station"] = raw["station"]
+        new["frozen"] = _flag(raw["frozen"])
+        # Missing mode property (other versions): trust the tile code.
+        detailed = raw["lw_mode"].lower() in ("1", "true", "")
+        code = raw["lw_code"] if detailed else ""
+        new["lw_code"] = code
+        # True only when FlightGear clearly says Detailed Weather is chosen.
+        new["lw_selected"] = raw["lw_mode"].lower() in ("1", "true")
+        now = time.monotonic()
+        if code and now >= self._next_clouds:
+            self.clouds = self._read_clouds(int(_num(raw["lw_tiles"]) or 0))
+            self._next_clouds = now + CLOUD_POLL_S
+        if now >= self._next_slow:
+            self._next_slow = now + SLOW_POLL_S
+            self.weather_volumes = self._read_weather_volumes()
+            cfg_raw = dict(zip(CFG_PROPS, self.get_many(CFG_PROPS.values())))
+            self.cfg = _parse_cfg(cfg_raw)
+            text = self.get(TERRAIN_DATA)
+            if text and "|" in text:
+                self.terrain = text
 
-                new["clouds"] = self.clouds if code else {}
-                new["cloud_alt_ft"] = self.cloud_alt_ft if code else None
-                new["weather_volumes"] = self.weather_volumes
-                self.state = new
-            except (OSError, ValueError) as exc:
-                self.error = str(exc) or exc.__class__.__name__
-                self.connected = False
-                return
-            time.sleep(self.poll_interval)
+        new["clouds"] = self.clouds if code else {}
+        new["cloud_alt_ft"] = self.cloud_alt_ft if code else None
+        new["weather_volumes"] = self.weather_volumes
+        new["cfg"] = self.cfg
+        new["terrain"] = self.terrain
+        self.state = new
 
     def _read_clouds(self, counter):
         """Detailed Weather cloud positions as {(tile, index): (lat, lon)}.
@@ -259,28 +381,14 @@ class FGLink:
         self.cloud_alt_ft = (min(alts), max(alts)) if alts else None
         return clouds
     def _read_weather_volumes(self):
-        """Read live weather volumes exported by FlightGear."""
-
-        count_text = self.get(WX_VOLUME_COUNT)
-        count = int(_num(count_text) or 0)
-
-        volumes = []
-
-        for i in range(count):
-            paths = [
-                f"/wxradar/volumes/volume[{i}]/{field}"
-                for field in WX_VOLUME_FIELDS
-            ]
-
-            values = self.get_many(paths)
-            volume = {
-                field: _num(value)
-                for field, value in zip(WX_VOLUME_FIELDS, values)
-            }
-
-            volumes.append(volume)
-
-        return volumes
+        """Read live weather volumes exported by FlightGear, in big batches."""
+        count = int(_num(self.get(WX_VOLUME_COUNT)) or 0)
+        paths = [f"/wxradar/volumes/volume[{i}]/{field}"
+                 for i in range(count) for field in WX_VOLUME_FIELDS]
+        values = self.get_many(paths) if paths else []
+        n = len(WX_VOLUME_FIELDS)
+        return [{field: _num(v) for field, v in zip(WX_VOLUME_FIELDS, values[i * n:(i + 1) * n])}
+                for i in range(count)]
 
     def send_metar(self, metar):
         self.set(METAR_PROPERTY, metar)

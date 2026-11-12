@@ -7,15 +7,19 @@ import sys
 import time
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog,
-                               QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QLineEdit, QMainWindow, QPushButton, QScrollArea,
-                               QSlider, QSpinBox, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QComboBox,
+                               QDial, QFileDialog, QFormLayout, QGridLayout, QGroupBox,
+                               QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+                               QPushButton, QScrollArea, QSlider, QSpinBox,
+                               QVBoxLayout, QWidget)
 
 from display import RadarDisplay
 from fg_link import FGLink
-from radar import RadarScanner
-from weather import SCENARIOS, WeatherModel, FlightGearWeather, parse_metar
+from radar import MODES, TILT_LIMIT_DEG, RadarScanner, auto_tilt, windshear
+from weather import (PRECIP_KINDS, SCENARIOS, WeatherModel, FlightGearWeather,
+                     parse_metar)
+from basic_weather import LayerWeather, freezing_level_ft
+from terrain import TerrainMap
 SIM_SPEED_KT = 250.0
 
 
@@ -32,12 +36,26 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Weather Radar")
         self.weather = WeatherModel()
         self.fg_weather = FlightGearWeather()
+        self.layer_weather = LayerWeather()   # Basic Weather, Manual Configuration
+        self.terrain = TerrainMap()
+        self.freezing_ft = None               # freezing level, ft MSL
+        self.manual_wx = False                # FlightGear uses Manual Configuration
         self.scanner = RadarScanner()
         self.display = RadarDisplay(self.scanner)
         self.fg = None
         self.origin = None          # lat/lon that maps to (0, 0) NM
         self.ax = self.ay = 0.0     # aircraft position (NM)
-        self.heading = 0.0
+        self.heading = 0.0          # where the nose points (true)
+        self.track = 0.0            # where the aircraft really goes (true); ND is track up
+        self.sim_gs = SIM_SPEED_KT  # simulated ground speed (kt)
+        self.pws = None             # windshear found by the PWS
+        self.pws_next = 0.0         # next PWS look (s)
+        self.pws_said = (None, 0.0)  # last spoken alert and when
+        try:
+            from PySide6.QtTextToSpeech import QTextToSpeech
+            self.tts = QTextToSpeech(self)
+        except Exception:           # no speech on this computer: beep instead
+            self.tts = None
         self.fg_metar = None        # last METAR seen in FlightGear
         self.sent_metar = None      # last METAR we sent to FlightGear
         self.sent_state = None      # app weather at the moment we sent it
@@ -93,41 +111,51 @@ class MainWindow(QMainWindow):
         self.metar = QLabel()
         self.metar.setWordWrap(True)
         self.metar.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.precip = QComboBox()
+        self.precip.addItems(PRECIP_KINDS)
+        self.precip.setToolTip("What falls from the storms. Snow shows cyan and "
+                               "weaker; rain and snow together show white.")
+        self.precip.currentTextChanged.connect(self._precip_changed)
         f.addRow("Scenario", self.scenario)
+        f.addRow("Precipitation", self.precip)
         f.addRow("Storm strength", self.intensity)
         f.addRow("Coverage", self.coverage)
         f.addRow("Wind from", self.wind_dir)
         f.addRow("Wind speed", self.wind_kt)
+        self.sim_freezing = QSpinBox()
+        self.sim_freezing.setRange(0, 20000)
+        self.sim_freezing.setSingleStep(1000)
+        self.sim_freezing.setValue(12000)
+        self.sim_freezing.setSuffix(" ft")
+        self.sim_freezing.setToolTip("Height where it is 0 °C. Above it rain is ice "
+                                     "and shows weaker on the radar.")
+        f.addRow("Freezing level", self.sim_freezing)
         f.addRow(self.regen)
+        self.burst_btn = QPushButton("Add microburst ahead (windshear test)")
+        self.burst_btn.setToolTip("Puts a microburst 3.5 NM ahead. Fly below 1200 ft "
+                                  "(Simulated aircraft > Altitude) to get the alerts.")
+        self.burst_btn.clicked.connect(self.add_microburst)
+        f.addRow(self.burst_btn)
         f.addRow(self.send_btn)
-        f.addRow("METAR", self.metar)
+        f.addRow("METAR to send", self.metar)
         self.coverage.sliderReleased.connect(self.regenerate)
         panel.addWidget(wx)
 
-        rd = QGroupBox("Radar")
-        f = QFormLayout(rd)
-        self.range = QComboBox()
-        self.range.addItems(["10", "20", "40", "80", "160", "320"])
-        self.range.setCurrentText("80")
-        self.range.currentTextChanged.connect(self.full_refresh)
-        self.gain = slider(50, 150, 100)
-        self.atten = QCheckBox("Attenuation")
-        self.atten.setChecked(True)
-        self.turb = QCheckBox("TURB mode (40 NM)")
-        save = QPushButton("Save radar image")
-        save.clicked.connect(self.save_image)
-        f.addRow("Range (NM)", self.range)
-        f.addRow("Gain", self.gain)
-        f.addRow(self.atten)
-        f.addRow(self.turb)
-        f.addRow(save)
-        panel.addWidget(rd)
+        panel.addWidget(self._build_wxr_panel())
 
         sim = QGroupBox("Simulated aircraft")
         f = QFormLayout(sim)
         self.sim_heading = slider(0, 359, 0)
+        self.sim_alt = QSpinBox()
+        self.sim_alt.setRange(0, 45000)
+        self.sim_alt.setSingleStep(1000)
+        self.sim_alt.setValue(25000)
+        self.sim_alt.setSuffix(" ft")
         self.time_scale = slider(1, 30, 10)
-        f.addRow("Heading", self.sim_heading)
+        self.sim_heading.setToolTip("Selected heading (the magenta bug). "
+                                    "The aircraft turns to it at 3° per second.")
+        f.addRow("Selected heading", self.sim_heading)
+        f.addRow("Altitude", self.sim_alt)
         f.addRow("Time speed-up", self.time_scale)
         panel.addWidget(sim)
 
@@ -154,17 +182,180 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(root)
         self.resize(1100, 680)
 
+    def _build_wxr_panel(self):
+        """Weather radar control panel (pedestal) plus the EFIS WXR switch."""
+        box = QGroupBox("Weather radar panel")
+        box.setObjectName("wxrPanel")
+        box.setStyleSheet("""
+            #wxrPanel { background: #2a2e33; color: #e8e8e8; border: 1px solid #555;
+                        border-radius: 6px; margin-top: 14px; padding-top: 6px; }
+            #wxrPanel::title { subcontrol-origin: margin; left: 8px; color: palette(window-text); }
+            #wxrPanel QLabel, #wxrPanel QCheckBox { color: #e8e8e8; }
+            #wxrPanel QPushButton { background: #3b4046; color: #e8e8e8;
+                        border: 1px solid #666; border-radius: 3px; padding: 4px 6px;
+                        font-weight: bold; }
+            #wxrPanel QPushButton:checked { background: #1d1f22; color: #3cff5a;
+                        border: 1px solid #3cff5a; }
+            #wxrPanel QPushButton:disabled { color: #777; }
+        """)
+        v = QVBoxLayout(box)
+
+        top = QHBoxLayout()
+        self.wxr_btn = QPushButton("WXR")
+        self.wxr_btn.setCheckable(True)
+        self.wxr_btn.setChecked(True)
+        self.wxr_btn.setToolTip("EFIS WXR switch: shows the weather on the ND")
+        self.wxr_btn.toggled.connect(self._wxr_changed)
+        top.addWidget(QLabel("EFIS"))
+        top.addWidget(self.wxr_btn)
+        top.addStretch()
+        top.addWidget(QLabel("Range"))
+        self.range = QComboBox()
+        self.range.addItems(["10", "20", "40", "80", "160", "320"])
+        self.range.setCurrentText("80")
+        self.range.currentTextChanged.connect(self.full_refresh)
+        top.addWidget(self.range)
+        top.addWidget(QLabel("NM"))
+        v.addLayout(top)
+
+        modes = QGridLayout()           # OFF STBY TEST / WX WX+T MAP
+        self.mode_group = QButtonGroup(self)
+        self.mode_group.setExclusive(True)
+        for i, name in enumerate(MODES):
+            b = QPushButton(name)
+            b.setCheckable(True)
+            b.setChecked(name == "WX")
+            self.mode_group.addButton(b)
+            modes.addWidget(b, i // 3, i % 3)
+        self.mode_group.buttonClicked.connect(self.full_refresh)
+        v.addLayout(modes)
+
+        knobs = QHBoxLayout()
+        # Tilt knob: -15 .. +15 degrees in quarter degrees
+        tcol = QVBoxLayout()
+        self.tilt = QDial()
+        self.tilt.setRange(-60, 60)
+        self.tilt.setValue(-4)
+        self.tilt.setNotchesVisible(True)
+        self.tilt.setFixedSize(80, 80)
+        self.tilt_label = QLabel(alignment=Qt.AlignCenter)
+        self.auto_tilt = QCheckBox("AUTO")
+        self.auto_tilt.setChecked(True)
+        self.auto_tilt.setToolTip("Tilt follows altitude and range, "
+                                  "keeping ground returns off the screen")
+        tcol.addWidget(QLabel("TILT", alignment=Qt.AlignCenter))
+        tcol.addWidget(self.tilt, alignment=Qt.AlignCenter)
+        tcol.addWidget(self.tilt_label)
+        tcol.addWidget(self.auto_tilt, alignment=Qt.AlignCenter)
+        knobs.addLayout(tcol)
+        # Gain knob: CAL (calibrated) or a manual offset in dB
+        gcol = QVBoxLayout()
+        self.gain = QDial()
+        self.gain.setRange(-10, 10)
+        self.gain.setValue(0)
+        self.gain.setNotchesVisible(True)
+        self.gain.setFixedSize(80, 80)
+        self.gain_label = QLabel(alignment=Qt.AlignCenter)
+        self.gain_cal = QCheckBox("CAL")
+        self.gain_cal.setChecked(True)
+        self.gain_cal.setToolTip("Calibrated gain. Untick to set it by hand.")
+        gcol.addWidget(QLabel("GAIN", alignment=Qt.AlignCenter))
+        gcol.addWidget(self.gain, alignment=Qt.AlignCenter)
+        gcol.addWidget(self.gain_label)
+        gcol.addWidget(self.gain_cal, alignment=Qt.AlignCenter)
+        knobs.addLayout(gcol)
+        v.addLayout(knobs)
+
+        self.atten = QCheckBox("Simulate attenuation")
+        self.atten.setChecked(True)
+        self.voice = QCheckBox("Windshear voice alerts")
+        self.voice.setChecked(True)
+        self.voice.setToolTip("Spoken PWS alerts: 'WINDSHEAR AHEAD', "
+                              "'GO AROUND, WINDSHEAR AHEAD', 'MONITOR RADAR DISPLAY'")
+        v.addWidget(self.voice)
+        save = QPushButton("Save radar image")
+        save.clicked.connect(self.save_image)
+        v.addWidget(self.atten)
+        v.addWidget(save)
+        return box
+
+    def _wxr_changed(self, on):
+        for b in self.mode_group.buttons():
+            b.setEnabled(on)
+        if on:
+            self.full_refresh()
+
+    def _radar_mode(self):
+        return self.mode_group.checkedButton().text()
+
+    def _altitudes(self):
+        """(aircraft altitude, ground elevation) in feet."""
+        s = self.fg.state if (self.fg and self.fg.connected) else None
+        if s:
+            return s["alt_ft"], s.get("ground_ft", 0.0)
+        return float(self.sim_alt.value()), 0.0
+
+    def _tilt_deg(self):
+        if self.auto_tilt.isChecked():
+            alt, ground = self._altitudes()
+            tilt = auto_tilt(alt - ground, float(self.range.currentText()))
+            if self._radar_mode() == "MAP":
+                tilt -= 2.0     # aim at the ground
+            return max(-TILT_LIMIT_DEG, tilt)
+        return self.tilt.value() / 4
+
+    def _gain_db(self):
+        return 0.0 if self.gain_cal.isChecked() else float(self.gain.value())
+
     # ------------------------------------------------------------ actions
     def regenerate(self, *_):
         self.weather.coverage = self.coverage.value() / 100
         self.weather.generate(self.scenario.currentText(), self.ax, self.ay, self.heading)
         self.full_refresh()
 
+    def add_microburst(self):
+        """Windshear test: a microburst 3.5 NM ahead on the present track."""
+        self.weather.add_microburst(self.ax, self.ay, self.track)
+        self.full_refresh()
+        self._notify("Microburst 3.5 NM ahead. Below 1200 ft the PWS will alert.")
+
+    def _speak(self, text):
+        if self.tts is not None:
+            self.tts.say(text)
+        else:
+            QApplication.beep()
+
+    def _update_pws(self, now, agl_ft, vs_fps):
+        """Predictive windshear: look a few times a second, alert like a Boeing."""
+        if now >= self.pws_next:
+            self.pws_next = now + 0.25
+            self.pws = windshear(self._scan_weather(), self.ax, self.ay,
+                                 self.track, agl_ft, self._altitudes()[1])
+        level = self.pws["level"] if self.pws else None
+        if level not in ("warning", "caution"):
+            self.pws_said = (None, 0.0)
+            return
+        said, when = self.pws_said
+        again = level == "warning" and now - when > 8.0     # warning repeats
+        if (level != said or again) and self.voice.isChecked():
+            if level == "caution":
+                self._speak("Monitor radar display")
+            elif vs_fps < -3.0:                             # descending: approach
+                self._speak("Go around, windshear ahead")
+            else:                                           # take-off
+                self._speak("Windshear ahead, windshear ahead")
+        if level != said or again:
+            self.pws_said = (level, now)
+
+    def _precip_changed(self, kind):
+        self.weather.precip = kind
+        self.full_refresh()
+
     def full_refresh(self, *_):
         self.display.refresh_all(self._scan())
 
     def toggle_fg(self):
-        if self.fg and self.fg.connected:
+        if self.fg:     # connected, or trying to reconnect
             self.fg.close()
             self.fg = None
             self.status.setText("Disconnected")
@@ -180,6 +371,7 @@ class MainWindow(QMainWindow):
         self.origin = None
         self.fg_metar = None
         self.synced_clouds = self.last_strike = None
+        self.terrain = TerrainMap()
         self.source.setCurrentText("FlightGear")
         self.status.setText("Connected, waiting for data...")
         self.connect_btn.setText("Disconnect")
@@ -228,9 +420,18 @@ class MainWindow(QMainWindow):
                 return "?"
             return f"{v / 1000:.1f} km" if v >= 1000 else f"{v:.0f} m"
 
+        cfg = s.get("cfg") or {}
+        fl = self.freezing_ft
         rows = [("<b>At your plane</b>", ""),
                 ("Weather mode", "Detailed Weather" if s.get("lw_selected")
-                 else "Basic Weather"),
+                 else ("Basic Weather (Manual Configuration)" if cfg.get("manual")
+                       else "Basic Weather")),
+                ("Paused", "YES" if s.get("frozen") else "no"),
+                ("Time speed-up", num("speed_up", ".0f", "x")),
+                ("Heading true / mag", f"{num('heading', '.0f')}° / {num('hdg_mag', '.0f')}°"),
+                ("Freezing level", "?" if fl is None else f"{fl:,.0f} ft"),
+                ("Real terrain", f"{self.terrain.known:.0%} of grid known"
+                 if self.terrain.elev is not None else "none yet (needs wxradar_export.nas)"),
                 ("METAR", s.get("metar") or "?"),
                 ("Radar weather volumes", str(
                     len(s.get("weather_volumes") or []))),
@@ -287,7 +488,8 @@ class MainWindow(QMainWindow):
 
     def _wx_state(self):
         """What the app's weather looks like: same storms, scenario and strength."""
-        return (self.weather.generation, self.weather.scenario, self.intensity.value())
+        return (self.weather.generation, self.weather.scenario, self.intensity.value(),
+                self.weather.precip)
 
     def save_image(self):
         path, _ = QFileDialog.getSaveFileName(self, "Save radar image",
@@ -296,29 +498,44 @@ class MainWindow(QMainWindow):
             self.display.render_frame().save(path)
 
     # --------------------------------------------------------------- loop
-    def _scan(self):
-        scan_weather = self.weather
+    def _scan_weather(self):
+        """The weather the radar looks at right now."""
+        fg_on = (self.source.currentText() == "FlightGear"
+                 and self.fg and self.fg.connected)
+        if fg_on and self.fg_weather.volumes:
+            return self.fg_weather          # Detailed Weather zones
+        if fg_on and self.manual_wx:
+            return self.layer_weather       # Basic Weather, Manual Configuration
+        return self.weather
 
-        if (
-            self.source.currentText() == "FlightGear"
-            and self.fg
-            and self.fg.connected
-            and self.fg_weather.volumes
-        ):
-            scan_weather = self.fg_weather
+    def _scan(self, rays=None):
+        """Radar picture for a slice of rays (all rays when None).
 
+        The ND is track up, so the picture is turned to the track.
+        """
+        scan_weather = self._scan_weather()
+        alt, ground = self._altitudes()
+        connected = self.fg and self.fg.connected
         return self.scanner.scan(
-            scan_weather, self.ax, self.ay, self.heading,
+            scan_weather, self.ax, self.ay, self.track,
             float(self.range.currentText()),
-            gain=self.gain.value() / 100,
+            alt_ft=alt, ground_ft=ground,
+            tilt_deg=self._tilt_deg(),
+            gain_db=self._gain_db(),
+            mode=self._radar_mode(),
             attenuation=self.atten.isChecked(),
-            turb_mode=self.turb.isChecked()
+            freezing_ft=self.freezing_ft,
+            terrain=self.terrain if connected else None,
+            rays=rays,
         )
 
     def _update_from_fg(self, follow_weather=True):
         """Position always follows FlightGear; wind and METAR only if follow_weather."""
         if not (self.fg and self.fg.connected):
-            if self.fg and self.fg.error:
+            if self.fg and self.fg.reconnecting:
+                self.status.setText(f"Connection lost ({self.fg.error}).\n"
+                                    "Reconnecting... FlightGear may be busy.")
+            elif self.fg and self.fg.error:
                 self.status.setText(f"Connection lost: {self.fg.error}")
             return False
         s = self.fg.state
@@ -331,6 +548,24 @@ class MainWindow(QMainWindow):
             self.regenerate()
         self.ax, self.ay = self._to_nm(s["lat"], s["lon"])
         self.heading = s["heading"]
+        # Track from the ground velocity. When slow (taxi, pushback), or when
+        # it is far from the heading (sliding, just moved, paused with old
+        # values), it means nothing: use the heading, like a real IRS on ground.
+        vn, ve = s.get("v_north_fps"), s.get("v_east_fps")
+        self.track = self.heading
+        if vn is not None and ve is not None and math.hypot(vn, ve) > 100.0:  # ~60 kt
+            trk = math.degrees(math.atan2(ve, vn)) % 360.0
+            if abs((trk - self.heading + 540.0) % 360.0 - 180.0) <= 45.0:
+                self.track = trk
+        cfg = s.get("cfg") or {}
+        ground = s.get("ground_ft", 0.0)
+        self.manual_wx = bool(cfg.get("manual")) and not s.get("lw_selected")
+        if cfg:
+            self.layer_weather.update(cfg, s.get("rain"), s.get("snow"), ground)
+        if follow_weather:
+            self.freezing_ft = freezing_level_ft(cfg, ground, s.get("alt_ft"), s.get("temp_c"))
+        if s.get("terrain"):
+            self.terrain.load(s["terrain"], self._to_nm, self.origin[0])
         self.fg_weather.update(
             s.get("weather_volumes", []),
             self.origin,
@@ -339,7 +574,8 @@ class MainWindow(QMainWindow):
         if s is not self.shown_state:   # new values from FlightGear
             self.shown_state = s
             self._show_fg_weather(s)
-        self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft")
+        again = f"  (reconnected {self.fg.reconnects}x)" if self.fg.reconnects else ""
+        self._set_status(f"Connected{again}  ALT {s['alt_ft']:.0f} ft")
         if not follow_weather:
             return True
 
@@ -353,14 +589,24 @@ class MainWindow(QMainWindow):
         if s.get("lw_code") and s.get("clouds"):
             self._update_detailed_weather(s)
             return True
-        if s.get("lw_code") and s.get("lw_selected"):
-            # Detailed Weather chosen but its engine made no clouds (not started
-            # with Apply): fall back to the METAR.
+        if self.manual_wx and not self.fg_weather.volumes:
+            # Manual Configuration: the METAR is not used, the layers are.
+            what = ("rain from the cloud layers" if self.layer_weather.volumes
+                    else "no rain or snow set")
+            self._set_status(f"Connected{again}  ALT {s['alt_ft']:.0f} ft\n"
+                             f"Basic Weather, Manual Configuration: {what}")
+            return True
+        if s.get("lw_selected") and not s.get("clouds"):
+            # Detailed Weather is on, but its clouds are not built yet (it
+            # takes a few seconds after Apply, and nothing while paused).
             if self.fg_weather.volumes:
                 status = (f"FlightGear radar volumes: "
                           f"{len(self.fg_weather.volumes)}")
+            elif s.get("frozen"):
+                status = ("Detailed Weather on, but FlightGear is PAUSED:\n"
+                          "it builds the weather after you unpause. Using METAR.")
             else:
-                status = "Detailed Weather has no clouds: using METAR"
+                status = "Detailed Weather starting (building clouds)... using METAR"
             self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n{status}")
         elif self.fg_weather.volumes:
             self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
@@ -378,7 +624,7 @@ class MainWindow(QMainWindow):
             # Just left Detailed Weather: replace its cloud echoes, even if the
             # METAR is unchanged or is the one we sent.
             self.fg_metar = metar
-            self._apply_fg_weather(*(parse_metar(metar) or ("Clear", 1.0, 1.0)))
+            self._apply_fg_weather(*(parse_metar(metar) or ("Clear", 1.0, 1.0, "Rain")))
         elif metar and metar != self.fg_metar:
             self.fg_metar = metar
             parsed = parse_metar(metar)
@@ -416,10 +662,14 @@ class MainWindow(QMainWindow):
         )
         self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n{radar_source}")
 
-    def _apply_fg_weather(self, scenario, intensity, coverage):
+    def _apply_fg_weather(self, scenario, intensity, coverage, precip="Rain"):
         self.scenario.blockSignals(True)
         self.scenario.setCurrentText(scenario)
         self.scenario.blockSignals(False)
+        self.precip.blockSignals(True)
+        self.precip.setCurrentText(precip)
+        self.precip.blockSignals(False)
+        self.weather.precip = precip
         self.intensity.setValue(round(intensity * 100))
         self.coverage.setValue(round(coverage * 100))
         self.regenerate()
@@ -446,31 +696,97 @@ class MainWindow(QMainWindow):
         fg_weather = fg_live and fg_mode
         fg_wind = fg_weather and "wind_from" in self.fg.state
         # Weather comes from FlightGear when live; the pilot only has radar controls.
-        for w in (self.scenario, self.intensity):
+        for w in (self.scenario, self.intensity, self.precip):
             w.setEnabled(not fg_weather)
         # Coverage and storm layout cannot be sent in a METAR: locked whenever connected.
         self.coverage.setEnabled(not fg_live)
         self.regen.setEnabled(not fg_live)
+        self.burst_btn.setEnabled(not fg_weather)
         self.wind_dir.setEnabled(not fg_wind)
         self.wind_kt.setEnabled(not fg_wind)
         self.sim_heading.setEnabled(not fg_live)
         self.time_scale.setEnabled(not fg_live)
         # Send is for preparing weather: connected, but in Simulated mode.
         self.send_btn.setEnabled(fg_live and not fg_mode)
+        if not fg_weather:
+            self.freezing_ft = float(self.sim_freezing.value())
+        self.sim_freezing.setEnabled(not fg_weather)
         if fg_live:
-            scale, source = 1.0, "FLIGHTGEAR" if fg_mode else "FG  WX EDIT"
+            # Storms move in FlightGear's time: stopped while paused, faster
+            # with time speed-up.
+            s = self.fg.state
+            scale = 0.0 if s.get("frozen") else max(0.0, s.get("speed_up", 1.0))
+            source = "FLIGHTGEAR" if fg_mode else "FG  WX EDIT"
+            if s.get("frozen"):
+                source += "  PAUSED"
         else:
             scale, source = float(self.time_scale.value()), "SIM"
-            self.heading = float(self.sim_heading.value())
-            dist = SIM_SPEED_KT / 3600.0 * dt * scale
-            self.ax += dist * math.sin(math.radians(self.heading))
-            self.ay += dist * math.cos(math.radians(self.heading))
+            # Turn towards the selected heading at 3 degrees per second.
+            diff = (self.sim_heading.value() - self.heading + 540.0) % 360.0 - 180.0
+            step = 3.0 * dt * scale
+            self.heading = (self.heading + max(-step, min(step, diff))) % 360.0
+            # Fly through the air at SIM_SPEED_KT; the wind carries the aircraft
+            # sideways, so the track (where it really goes) is not the heading.
+            h, to = math.radians(self.heading), math.radians(self.weather.wind_from + 180.0)
+            wk = self.weather.wind_kt
+            ve = SIM_SPEED_KT * math.sin(h) + wk * math.sin(to)
+            vn = SIM_SPEED_KT * math.cos(h) + wk * math.cos(to)
+            self.track = math.degrees(math.atan2(ve, vn)) % 360.0
+            self.sim_gs = math.hypot(ve, vn)
+            self.ax += ve / 3600.0 * dt * scale
+            self.ay += vn / 3600.0 * dt * scale
 
         self.weather.step(dt * scale)
-        self.display.info.update(heading=self.heading, range=int(self.range.currentText()),
-                                 gain=self.gain.value() / 100,
-                                 turb=self.turb.isChecked(), source=source)
-        self.display.advance(self._scan(), dt)
+        self.layer_weather.step(dt * scale, self.weather.wind_from, self.weather.wind_kt)
+        self.sim_alt.setEnabled(not fg_live)
+
+        tilt, auto = self._tilt_deg(), self.auto_tilt.isChecked()
+        self.tilt.setEnabled(not auto)
+        self.gain.setEnabled(not self.gain_cal.isChecked())
+        if auto:
+            self.tilt.blockSignals(True)
+            self.tilt.setValue(round(tilt * 4))
+            self.tilt.blockSignals(False)
+        self.tilt_label.setText(f"{tilt:+.1f}°" + (" A" if auto else ""))
+        self.gain_label.setText("CAL" if self.gain_cal.isChecked()
+                                else f"{self._gain_db():+.0f} dB")
+
+        on = self.wxr_btn.isChecked()
+        wf, wk = self.weather.wind_from, self.weather.wind_kt
+        if fg_live:
+            s = self.fg.state
+            gs, tas = s.get("gs_kt"), s.get("tas_kt")
+            wf, wk = s.get("wind_from", wf), s.get("wind_kt", wk)
+        else:
+            gs, tas = self.sim_gs, SIM_SPEED_KT
+        # The ND shows magnetic directions (TRK ... MAG). FlightGear gives the
+        # magnetic heading; the difference to true (variation) turns the rest.
+        var = 0.0
+        if fg_live and "hdg_mag" in self.fg.state:
+            var = (self.heading - self.fg.state["hdg_mag"] + 180.0) % 360.0 - 180.0
+        if fg_live:
+            bug = self.fg.state.get("hdg_bug")           # already magnetic
+        else:
+            bug = float(self.sim_heading.value())
+
+        # Predictive windshear: works on its own when low, whatever the radar mode.
+        alt, ground = self._altitudes()
+        vs = self.fg.state.get("vs_fps", 0.0) if fg_live else 0.0
+        self._update_pws(time.perf_counter(), alt - ground, vs)
+        rng = int(self.range.currentText())
+        pws = self.pws
+        if on and self._radar_mode() == "TEST":           # TEST shows the icon too
+            pws = {"level": "warning", "a0": -20.0, "a1": 20.0,
+                   "r0": rng * 0.12, "r1": rng * 0.25}
+
+        self.display.info.update(gs=gs, tas=tas, wind_from=(wf - var) % 360, wind_kt=wk)
+        self.display.info.update(up=(self.track - var) % 360, up_label="TRK",
+                                 heading=(self.heading - var) % 360, hdg_bug=bug,
+                                 range=rng, on=on, mode=self._radar_mode(), tilt=tilt,
+                                 auto_tilt=auto, gain_db=self._gain_db(),
+                                 gain_cal=self.gain_cal.isChecked(), source=source,
+                                 pws=pws)
+        self.display.advance(self._scan, dt)
 
 
 if __name__ == "__main__":
