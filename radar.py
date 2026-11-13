@@ -23,6 +23,10 @@ MODES = ("OFF", "STBY", "TEST", "WX", "WX+T", "MAP")
 SCANNING_MODES = ("TEST", "WX", "WX+T", "MAP")   # OFF and STBY send no beam
 DBZ_BANDS = (20.0, 30.0, 40.0, 50.0)     # green, yellow, red, magenta
 TURB_MAX_RANGE_NM = 40.0  # Doppler turbulence detection limit
+# Turbulence shown in WX+T from this strength (0..1). FlightGear's small
+# thunderstorms carry 0.6, medium 0.8, big 1.0: all of them shake the
+# aircraft, so all of them show.
+TURB_SHOW = 0.5
 TILT_LIMIT_DEG = 15.0
 BEAM_WIDTH_DEG = 3.5      # half-power beam width of the antenna
 FT_PER_NM = 6076.1
@@ -152,6 +156,12 @@ class RadarScanner:
         self.bin_frac = (np.arange(n_bins) + 0.5) / n_bins
         self.rng = np.random.default_rng(seed)
         self.terrain = ValueNoise(seed + 11)
+        # Every shown bin that is ground echo, not weather (True = clutter).
+        self.ground_mask = np.zeros((n_rays, n_bins), dtype=bool)
+
+    def ground_share(self):
+        """Part of the screen (0..1) painted by ground clutter."""
+        return float(self.ground_mask.mean())
 
     def test_pattern(self):
         """The TEST mode picture: bands of every color, outward from the plane."""
@@ -172,8 +182,10 @@ class RadarScanner:
         rays = slice(None) if rays is None else rays    # only these rays (sweep)
         i0, i1, _ = rays.indices(self.n_rays)
         if mode == "TEST":
+            self.ground_mask[i0:i1] = False
             return self.test_pattern()[i0:i1]
         if mode not in SCANNING_MODES:                  # OFF / STBY: no beam
+            self.ground_mask[i0:i1] = False
             return np.zeros((i1 - i0, self.n_bins), dtype=np.uint8)
         # Scan one extra ray each side so the smoothing has neighbours.
         e0, e1 = max(0, i0 - 1), min(self.n_rays, i1 + 1)
@@ -284,6 +296,9 @@ class RadarScanner:
             factor = 10.0 ** (-path_db / 10.0)
             z_rain, z_snow, z_ground = z_rain * factor, z_snow * factor, z_ground * factor
 
+        # Where the ground echo is stronger than the weather: clutter.
+        ground_wins = z_ground > (z_rain + z_snow)
+
         # Smooth picture: soften the echoes and the speckle a little, so edges
         # are rounded instead of grainy (like a real radar display).
         speckle = _smooth(self.rng.normal(0.0, 1.5, shape)) + gain_db
@@ -298,6 +313,7 @@ class RadarScanner:
             levels[total >= 20] = 7
             levels[total >= 32] = 2
             levels[total >= 44] = 4
+            self.ground_mask[i0:i1] = ((levels > 0) & ground_wins)[keep]
             return levels[keep]
 
         for i, band in enumerate(DBZ_BANDS, start=1):
@@ -307,5 +323,6 @@ class RadarScanner:
         levels[snow_detected & ~rain_detected] = 5
         levels[snow_detected & rain_detected & (levels < 4)] = 6
         if mode == "WX+T":
-            levels[(r <= TURB_MAX_RANGE_NM) & (levels >= 1) & (turb > 0.65)] = 4
+            levels[(r <= TURB_MAX_RANGE_NM) & (levels >= 1) & (turb > TURB_SHOW)] = 4
+        self.ground_mask[i0:i1] = ((levels > 0) & ground_wins)[keep]
         return levels[keep]

@@ -35,7 +35,8 @@ class RadarDisplay(QWidget):
         self.info = {"up": 0.0, "heading": 0.0, "up_label": "TRK", "hdg_bug": None,
                      "range": 40, "on": True, "mode": "WX", "tilt": 0.0,
                      "auto_tilt": False, "gain_db": 0.0, "gain_cal": True,
-                     "source": "SIM", "pws": None}
+                     "source": "SIM", "pws": None,
+                     "wx_src": None, "gnd_clutter": False}
         self.frame = QImage()
         self._build_pixel_map()
 
@@ -202,6 +203,7 @@ class RadarDisplay(QWidget):
 
         self._draw_pws(p)
         self._draw_wxr_status(p)
+        self._draw_gnd_label(p)
 
     def _draw_heading_marks(self, p):
         """Heading pointer (where the nose points) and the selected heading bug."""
@@ -264,6 +266,37 @@ class RadarDisplay(QWidget):
             p.drawText(QRectF(W - 270, CY - R * 0.56, 200, 26),
                        Qt.AlignRight | Qt.AlignVCenter, "WINDSHEAR")
 
+    def _draw_gnd_label(self, p):
+        """'GND' written on the ground clutter itself, where most of it is.
+
+        The screen is cut into sectors and range bands; the label goes on the
+        one with the most clutter, so it always sits on the ground echo.
+        """
+        if not self.info.get("gnd_clutter"):
+            return
+        mask = self.scanner.ground_mask
+        sectors, bands = 12, 8
+        if self.nr % sectors or self.nb % bands:
+            return
+        counts = mask.reshape(sectors, self.nr // sectors,
+                              bands, self.nb // bands).sum(axis=(1, 3))
+        s, b = np.unravel_index(np.argmax(counts), counts.shape)
+        if counts[s, b] == 0:
+            return
+        rel = -self.half + (s + 0.5) * 2 * self.half / sectors
+        radius = max(40.0, (b + 0.5) / bands * R)
+        at = self._polar(radius, rel)
+        p.setFont(QFont("Arial", 11, QFont.Bold))
+        text = "GND CLUTTER"
+        w = p.fontMetrics().horizontalAdvance(text) + 8
+        box = QRectF(at.x() - w / 2, at.y() - 9, w, 18)
+        box.moveLeft(max(2.0, min(W - w - 2.0, box.left())))
+        p.setPen(QPen(AMBER, 1))
+        p.setBrush(QColor(0, 0, 0, 170))       # dark box so it reads on any echo
+        p.drawRect(box)
+        p.setBrush(Qt.NoBrush)
+        p.drawText(box, Qt.AlignCenter, text)
+
     def _draw_wxr_status(self, p):
         """Weather radar annunciation on the left (cyan): mode, tilt, gain."""
         info = self.info
@@ -294,6 +327,14 @@ class RadarDisplay(QWidget):
         p.drawText(QPointF(x, y + 20), tilt_txt)
         if not info["gain_cal"]:
             p.drawText(QPointF(x, y + 40), "VAR")
+        # Where the weather on the screen comes from, and a ground clutter
+        # warning. Amber = look carefully (approximate, or not weather).
+        p.setFont(QFont("Arial", 11))
+        src = info.get("wx_src")
+        if src:
+            text, careful = src
+            p.setPen(AMBER if careful else CYAN)
+            p.drawText(QPointF(x, y + 66), text)
 
     def paintEvent(self, _event):
         img = self.render_frame()

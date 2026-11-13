@@ -59,6 +59,7 @@ HERE_PROPS = {
     "hdg_bug": "/autopilot/settings/heading-bug-deg",  # selected heading (magnetic)
 }
 FROZEN = "/sim/freeze/master"                # true while FlightGear is paused
+REINIT = "/sim/signals/reinit"               # true while FlightGear resets the flight
 
 # Basic Weather settings (the Manual Configuration dialog uses the same ones;
 # FlightGear also fills them from the METAR). Read every few seconds.
@@ -137,7 +138,7 @@ WX_VOLUME_FIELDS = (
 
 FAST_PROPS = {**POSITION_PROPS, **WIND_PROPS, **LIGHTNING_PROPS,
               "metar": METAR_PROPERTY, "lw_code": LW_CODE, "frozen": FROZEN,
-              "lw_mode": LW_MODE, "lw_tiles": LW_TILE_COUNTER,
+              "lw_mode": LW_MODE, "lw_tiles": LW_TILE_COUNTER, "reinit": REINIT,
               "station": LW_STATION, **NUMBER_PROPS}
 
 
@@ -190,6 +191,7 @@ class FGLink:
         self.terrain = None         # terrain grid text from wxradar_export.nas
         self.clouds = {}
         self.cloud_alt_ft = None    # (lowest, highest) Detailed Weather cloud
+        self.cache_gen = 0          # +1 on every clear_cache(); stamped on each state
         self.connected = False
         self.reconnecting = False
         self.reconnects = 0
@@ -313,7 +315,20 @@ class FGLink:
                                 else OSError(f"{exc.__class__.__name__}: {exc}"))
             self._stop.wait(self.poll_interval)
 
+    def clear_cache(self):
+        """Forget clouds and volumes read so far (e.g. FlightGear was reset).
+
+        They are read again at once. States read before this call keep the
+        old number in state["gen"], so the app can tell they are old.
+        """
+        self.cache_gen += 1
+        self.clouds = {}
+        self.cloud_alt_ft = None
+        self.weather_volumes = []
+        self._next_clouds = self._next_slow = 0.0
+
     def _poll_once(self):
+        gen = self.cache_gen
         raw = dict(zip(FAST_PROPS, self.get_many(FAST_PROPS.values())))
         new = {k: float(raw[k]) for k in POSITION_PROPS}
         for k in (*WIND_PROPS, *LIGHTNING_PROPS, *NUMBER_PROPS):
@@ -323,6 +338,7 @@ class FGLink:
         new["metar"] = raw["metar"]
         new["station"] = raw["station"]
         new["frozen"] = _flag(raw["frozen"])
+        new["reinit"] = _flag(raw["reinit"])
         # Missing mode property (other versions): trust the tile code.
         detailed = raw["lw_mode"].lower() in ("1", "true", "")
         code = raw["lw_code"] if detailed else ""
@@ -347,6 +363,13 @@ class FGLink:
         new["weather_volumes"] = self.weather_volumes
         new["cfg"] = self.cfg
         new["terrain"] = self.terrain
+        new["gen"] = gen
+        if gen != self.cache_gen:
+            # clear_cache() ran while this poll was reading: what it read
+            # may be from before the reset, so drop it and read again.
+            self.clouds, self.cloud_alt_ft, self.weather_volumes = {}, None, []
+            self._next_clouds = self._next_slow = 0.0
+            return
         self.state = new
 
     def _read_clouds(self, counter):

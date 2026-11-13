@@ -21,6 +21,8 @@ from weather import (PRECIP_KINDS, SCENARIOS, WeatherModel, FlightGearWeather,
 from basic_weather import LayerWeather, freezing_level_ft
 from terrain import TerrainMap
 SIM_SPEED_KT = 250.0
+RESET_JUMP_NM = 5.0       # aircraft moved this far in one read: FlightGear was reset
+GND_CLUTTER_SHARE = 0.01  # warn when ground echo paints over 1 % of the screen
 
 
 def slider(lo, hi, value):
@@ -64,6 +66,8 @@ class MainWindow(QMainWindow):
         self.synced_clouds = None   # Detailed Weather clouds already on the radar
         self.last_strike = None     # last lightning strike already applied
         self.notice = ("", 0.0)     # short message kept under the live status
+        self.last_fg_pos = None     # lat/lon at the last FlightGear read (reset check)
+        self.was_reinit = False     # FlightGear reset flag at the last read
 
         self._build_ui()
         self.regenerate()
@@ -372,6 +376,7 @@ class MainWindow(QMainWindow):
         self.fg_metar = None
         self.synced_clouds = self.last_strike = None
         self.terrain = TerrainMap()
+        self.last_fg_pos, self.was_reinit = None, False
         self.source.setCurrentText("FlightGear")
         self.status.setText("Connected, waiting for data...")
         self.connect_btn.setText("Disconnect")
@@ -541,11 +546,23 @@ class MainWindow(QMainWindow):
         s = self.fg.state
         if not s:
             return False
+        if self._fg_was_reset(s):
+            self._on_fg_reset(follow_weather)
+        # Read before the reset: its clouds and volumes may be old. Use only
+        # the position until fresh data arrives.
+        stale = s.get("gen", 0) != self.fg.cache_gen
         if self.origin is None:
             self.origin = (s["lat"], s["lon"])
             self.ax = self.ay = 0.0
             self.heading = s["heading"]
-            self.regenerate()
+            if follow_weather:
+                # The weather comes from FlightGear: start empty, never with
+                # the app's own storms (it fills in below).
+                self.weather.cells = []
+                self.weather.scenario = ""
+                self.display.refresh_all(0)
+            else:
+                self.regenerate()
         self.ax, self.ay = self._to_nm(s["lat"], s["lon"])
         self.heading = s["heading"]
         # Track from the ground velocity. When slow (taxi, pushback), or when
@@ -564,6 +581,13 @@ class MainWindow(QMainWindow):
             self.layer_weather.update(cfg, s.get("rain"), s.get("snow"), ground)
         if follow_weather:
             self.freezing_ft = freezing_level_ft(cfg, ground, s.get("alt_ft"), s.get("temp_c"))
+        if stale:
+            if follow_weather:
+                self.weather.cells = []     # no made-up storms while we wait
+                self.weather.scenario = ""  # rebuilt from FlightGear afterwards
+            self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
+                             "FlightGear was reset: reading the weather again...")
+            return True
         if s.get("terrain"):
             self.terrain.load(s["terrain"], self._to_nm, self.origin[0])
         self.fg_weather.update(
@@ -597,16 +621,20 @@ class MainWindow(QMainWindow):
                              f"Basic Weather, Manual Configuration: {what}")
             return True
         if s.get("lw_selected") and not s.get("clouds"):
-            # Detailed Weather is on, but its clouds are not built yet (it
-            # takes a few seconds after Apply, and nothing while paused).
+            # Detailed Weather is on, but has no clouds yet (building after
+            # Apply, or paused). Until they come, storms are drawn from the
+            # scenario's METAR: the right kind of weather (e.g. TSRA for
+            # Thunderstorm), but at made-up places. The screen says so.
             if self.fg_weather.volumes:
                 status = (f"FlightGear radar volumes: "
                           f"{len(self.fg_weather.volumes)}")
             elif s.get("frozen"):
                 status = ("Detailed Weather on, but FlightGear is PAUSED:\n"
-                          "it builds the weather after you unpause. Using METAR.")
+                          "it builds the weather after you unpause.\n"
+                          "Until then: storms from the METAR (made-up places)")
             else:
-                status = "Detailed Weather starting (building clouds)... using METAR"
+                status = ("Detailed Weather building clouds...\n"
+                          "Until then: storms from the METAR (made-up places)")
             self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n{status}")
         elif self.fg_weather.volumes:
             self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
@@ -636,6 +664,62 @@ class MainWindow(QMainWindow):
             if parsed and not ours:
                 self._apply_fg_weather(*parsed)
         return True
+
+    def _fg_was_reset(self, s):
+        """True once when FlightGear resets: its reset flag turns on, or the
+        aircraft jumps further than it could fly between two reads."""
+        pos = (s["lat"], s["lon"])
+        jump = False
+        if self.last_fg_pos is not None:
+            dy = (pos[0] - self.last_fg_pos[0]) * 60.0
+            dx = (pos[1] - self.last_fg_pos[1]) * 60.0 * math.cos(math.radians(pos[0]))
+            jump = math.hypot(dx, dy) > RESET_JUMP_NM
+        self.last_fg_pos = pos
+        reinit = bool(s.get("reinit"))
+        started = reinit and not self.was_reinit
+        self.was_reinit = reinit
+        return jump or started
+
+    def _on_fg_reset(self, follow_weather):
+        """FlightGear was reset: drop everything read before, read it again.
+
+        FlightGear keeps its Detailed Weather over a reset, so weather can come
+        back on the radar: that is FlightGear's real weather, not old data.
+        """
+        self.fg.clear_cache()
+        self.origin = None                  # centre the map on the new position
+        self.synced_clouds = self.last_strike = None
+        self.shown_state = None
+        self.fg_metar = None
+        self.fg_weather.update([], None, 0.0)
+        self.terrain = TerrainMap()
+        self.pws = None
+        if follow_weather:
+            self.weather.cells = []
+            self.weather.scenario = ""
+        self.scanner.ground_mask[:] = False
+        self.display.refresh_all(0)
+        self._notify("FlightGear was reset: radar cleared, weather read again", 6.0)
+
+    def _wx_source(self):
+        """Label for the screen: where the weather on the radar comes from,
+        and whether it is only approximate (shown amber)."""
+        fg_on = (self.source.currentText() == "FlightGear"
+                 and self.fg and self.fg.connected)
+        if not fg_on:
+            return ("SIM WX", False)
+        s = self.fg.state or {}
+        if s.get("gen", 0) != self.fg.cache_gen:
+            return ("WX RESET", True)
+        if self.fg_weather.volumes:
+            return (f"FG VOLUMES {len(self.fg_weather.volumes)}", False)
+        if self.manual_wx:
+            return ("FG LAYERS", False)
+        if s.get("lw_code") and s.get("clouds"):
+            return (f"CLOUD ECHO {len(s['clouds'])}", True)
+        if s.get("lw_selected"):
+            return ("METAR TEMP", True)     # Detailed Weather still building
+        return ("FG METAR", True)
 
     def _to_nm(self, lat, lon):
         """Lat/lon to x (east), y (north) in NM from the origin."""
@@ -785,7 +869,10 @@ class MainWindow(QMainWindow):
                                  range=rng, on=on, mode=self._radar_mode(), tilt=tilt,
                                  auto_tilt=auto, gain_db=self._gain_db(),
                                  gain_cal=self.gain_cal.isChecked(), source=source,
-                                 pws=pws)
+                                 pws=pws, wx_src=self._wx_source(),
+                                 gnd_clutter=(on and self._radar_mode() in ("WX", "WX+T")
+                                              and self.scanner.ground_share()
+                                              > GND_CLUTTER_SHARE))
         self.display.advance(self._scan, dt)
 
 
