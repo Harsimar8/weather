@@ -5,7 +5,7 @@ HTTP server and writes:
   volume_log.txt      - every change, with time, raw values and meaning
   volume_current.txt  - only the latest weather (overwritten each change)
 
-Start FlightGear with:  --httpd=8080
+Start FlightGear with:  --httpd=8081
 Run:                    python volume_logger.py
 Stop:                   Ctrl+C
 """
@@ -17,7 +17,7 @@ import time
 import urllib.request
 from datetime import datetime
 
-FG = "http://127.0.0.1:8080/json"   # not "localhost": Windows tries IPv6 first and stalls
+FG = "http://127.0.0.1:8081/json"   # not "localhost": Windows tries IPv6 first and stalls
 POLL_S = 2.0
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(HERE, "volume_log.txt")
@@ -101,7 +101,8 @@ def level(x):
 
 
 def radar_colour(rain):
-    dbz = 20 + (rain - 0.22) * (10 / 0.265)          # same as radar.py to_dbz
+    refl = 0.15 + 1.05 * rain                        # same as weather.py
+    dbz = 20 + (refl - 0.22) * (10 / 0.265)          # same as radar.py to_dbz
     if dbz < 20: name = "nothing (below 20 dBZ)"
     elif dbz < 30: name = "GREEN"
     elif dbz < 40: name = "YELLOW"

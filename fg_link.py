@@ -10,6 +10,8 @@ import time
 # Debug > Browse Internal Properties > environment, as names can differ
 # between versions and weather systems.
 METAR_PROPERTY = "/environment/metar/data"
+PLACE = "/wxradar/place"                      # weather placed from the app
+PLACE_RESULT = PLACE + "/result"
 
 POSITION_PROPS = {
     "lat": "/position/latitude-deg",
@@ -415,3 +417,28 @@ class FGLink:
 
     def send_metar(self, metar):
         self.set(METAR_PROPERTY, metar)
+
+    def set_many(self, items):
+        """Set several properties in one go, in order (one short wait at the end)."""
+        with self.lock:
+            if not self.sock:
+                raise OSError("not connected")
+            self.sock.sendall("".join(f"set {p} {v}\r\n" for p, v in items).encode("utf-8"))
+            time.sleep(0.05)
+            self._drain()
+
+    def place_weather(self, kind, lat, lon, radius_m, rain, turb, base_agl_ft):
+        """Ask wxradar_export.nas to build a shower / cb / thunderstorm at lat, lon.
+        The answer appears in PLACE_RESULT a moment later."""
+        request = int(time.time() * 1000) % 1_000_000_000   # new number every time
+        self.set_many([
+            (PLACE + "/result", "waiting"),
+            (PLACE + "/kind", kind),
+            (PLACE + "/latitude-deg", f"{lat:.6f}"),
+            (PLACE + "/longitude-deg", f"{lon:.6f}"),
+            (PLACE + "/radius-m", f"{radius_m:.0f}"),
+            (PLACE + "/rain", f"{rain:.2f}"),
+            (PLACE + "/turbulence", f"{turb:.2f}"),
+            (PLACE + "/base-agl-ft", f"{base_agl_ft:.0f}"),
+            (PLACE + "/request", request),       # last: this starts the build
+        ])

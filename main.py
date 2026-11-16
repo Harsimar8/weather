@@ -14,15 +14,22 @@ from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QComboBox,
                                QVBoxLayout, QWidget)
 
 from display import RadarDisplay
-from fg_link import FGLink
+from fg_link import PLACE_RESULT, FGLink
 from radar import MODES, TILT_LIMIT_DEG, RadarScanner, auto_tilt, windshear
-from weather import (PRECIP_KINDS, SCENARIOS, WeatherModel, FlightGearWeather,
+from weather import (PRECIP_KINDS, SCENARIOS, Cell, WeatherModel, FlightGearWeather,
                      parse_metar)
 from basic_weather import LayerWeather, freezing_level_ft
 from terrain import TerrainMap
 SIM_SPEED_KT = 250.0
 RESET_JUMP_NM = 5.0       # aircraft moved this far in one read: FlightGear was reset
 GND_CLUTTER_SHARE = 0.01  # warn when ground echo paints over 1 % of the screen
+# Weather you can place by clicking on the radar:
+# name: (kind for wxradar_export.nas, radius km, rain %, turbulence %, base ft AGL)
+PLACE_KINDS = {
+    "Rain shower": ("shower", 2, 40, 0, 3000),
+    "Cumulonimbus (Cb)": ("cb", 3, 80, 60, 2500),
+    "Thunderstorm": ("thunderstorm", 5, 100, 80, 2500),
+}
 
 
 def slider(lo, hi, value):
@@ -145,6 +152,7 @@ class MainWindow(QMainWindow):
         self.coverage.sliderReleased.connect(self.regenerate)
         panel.addWidget(wx)
 
+        panel.addWidget(self._build_place_panel())
         panel.addWidget(self._build_wxr_panel())
 
         sim = QGroupBox("Simulated aircraft")
@@ -185,6 +193,113 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.display, 1)
         self.setCentralWidget(root)
         self.resize(1100, 680)
+
+    def _build_place_panel(self):
+        """Place a rain shower, Cb or thunderstorm where you click on the radar."""
+        box = QGroupBox("Place weather (click on radar)")
+        f = QFormLayout(box)
+        self.place_on = QCheckBox("Clicking the radar places weather")
+        self.place_kind = QComboBox()
+        self.place_kind.addItems(PLACE_KINDS)
+        self.place_radius = QSpinBox()
+        self.place_radius.setRange(1, 10)
+        self.place_radius.setSuffix(" km radius")
+        self.place_rain = slider(5, 100, 40)
+        self.place_turb = slider(0, 100, 0)
+        self.place_base = QSpinBox()
+        self.place_base.setRange(500, 10000)
+        self.place_base.setSingleStep(500)
+        self.place_base.setSuffix(" ft AGL")
+        self.place_rain_lbl, self.place_turb_lbl = QLabel(), QLabel()
+        self.place_rain.valueChanged.connect(self._place_labels)
+        self.place_turb.valueChanged.connect(self._place_labels)
+        self.place_kind.currentTextChanged.connect(self._place_defaults)
+        self.place_status = QLabel("FlightGear: needs Detailed Weather and the new "
+                                   "wxradar_export.nas. Not connected: the storm is "
+                                   "added to the app's own weather.")
+        self.place_status.setWordWrap(True)
+        rain_row, turb_row = QHBoxLayout(), QHBoxLayout()
+        rain_row.addWidget(self.place_rain)
+        rain_row.addWidget(self.place_rain_lbl)
+        turb_row.addWidget(self.place_turb)
+        turb_row.addWidget(self.place_turb_lbl)
+        f.addRow(self.place_on)
+        f.addRow("Type", self.place_kind)
+        f.addRow("Size", self.place_radius)
+        f.addRow("Rain", rain_row)
+        f.addRow("Turbulence", turb_row)
+        f.addRow("Cloud base", self.place_base)
+        f.addRow(self.place_status)
+        self._place_defaults(self.place_kind.currentText())
+        self.display.clicked.connect(self.place_at)
+        return box
+
+    def _place_defaults(self, name):
+        _kind, radius, rain, turb, base = PLACE_KINDS[name]
+        self.place_radius.setValue(radius)
+        self.place_rain.setValue(rain)
+        self.place_turb.setValue(turb)
+        self.place_base.setValue(base)
+        self._place_labels()
+
+    def _place_labels(self, *_):
+        rain = self.place_rain.value() / 100
+        # Same sums as weather.py and radar.py: what colour this rain paints.
+        dbz = 20 + (0.15 + 1.05 * rain - 0.22) * (10 / 0.265)
+        colour = ("GREEN" if dbz < 30 else "YELLOW" if dbz < 40
+                  else "RED" if dbz < 50 else "MAGENTA")
+        self.place_rain_lbl.setText(f"{rain:.2f} {colour}")
+        turb = self.place_turb.value() / 100
+        self.place_turb_lbl.setText("none" if turb == 0 else f"{turb:.2f}")
+
+    def place_at(self, rel_deg, dist_nm):
+        """Radar click: build the chosen weather there."""
+        if not self.place_on.isChecked():
+            return
+        name = self.place_kind.currentText()
+        kind = PLACE_KINDS[name][0]
+        radius_km = self.place_radius.value()
+        rain = self.place_rain.value() / 100
+        turb = self.place_turb.value() / 100
+        bearing = (self.track + rel_deg) % 360.0      # the screen is track up
+        b = math.radians(bearing)
+        where = f"{dist_nm:.1f} NM, bearing {bearing:03.0f}° true"
+        s = self.fg.state if (self.fg and self.fg.connected) else None
+        if s:
+            lat0 = s["lat"]
+            lat = lat0 + dist_nm * math.cos(b) / 60.0
+            lon = s["lon"] + dist_nm * math.sin(b) / (60.0 * math.cos(math.radians(lat0)))
+            try:
+                self.fg.place_weather(kind, lat, lon, radius_km * 1000.0, rain, turb,
+                                      self.place_base.value())
+            except OSError as exc:
+                self.place_status.setText(f"Send failed: {exc}")
+                return
+            self.place_status.setText(f"{name} sent to FlightGear, {where}. Waiting...")
+            QTimer.singleShot(2500, self._check_place)
+        else:
+            # No FlightGear: add it to the app's own storms instead.
+            x = self.ax + dist_nm * math.sin(b)
+            y = self.ay + dist_nm * math.cos(b)
+            r_nm = radius_km / 1.852
+            self.weather.cells.append(Cell(x, y, r_nm, r_nm, 0.0, 0.2 + 1.1 * rain, turb))
+            self.full_refresh()
+            self.place_status.setText(f"{name} added to the app's weather, {where}")
+        self.display.mark(rel_deg, dist_nm)
+
+    def _check_place(self):
+        if not (self.fg and self.fg.connected):
+            return
+        try:
+            result = self.fg.get(PLACE_RESULT)
+        except OSError as exc:
+            result = f"no answer ({exc})"
+        if result in ("", "waiting"):
+            result = ("No answer from FlightGear. Load the new wxradar_export.nas "
+                      "(restart FlightGear or run test_fg_export.py).")
+        elif result.startswith("OK"):
+            result += ". The radar shows it within a few seconds."
+        self.place_status.setText(result)
 
     def _build_wxr_panel(self):
         """Weather radar control panel (pedestal) plus the EFIS WXR switch."""

@@ -3,6 +3,7 @@
 # Every 2 s: copies Detailed Weather's effect volumes to /wxradar/volumes.
 # All the time, a little per frame: builds a terrain grid around the aircraft
 # (height and land/water) and puts it in /wxradar/terrain/data.
+# On request: places a rain shower, Cb or thunderstorm (see place_weather).
 #
 # Timers run in real time (last argument 1), so this keeps working while
 # FlightGear is paused.
@@ -130,6 +131,76 @@ var terrain_loop = func {
     }
     settimer(terrain_loop, t.busy ? 0 : 1, 1);
 };
+
+# ------------------------------------------------------------ placing weather
+# The app (click on the radar) writes /wxradar/place/* and then a new number
+# in /wxradar/place/request. FlightGear's own Detailed Weather code builds the
+# clouds and the effect volume; the new volume is then set to the size, rain
+# and turbulence that were asked for. The answer goes to /wxradar/place/result.
+#   kind          shower | cb | thunderstorm
+#   latitude-deg, longitude-deg, radius-m, rain (0..1), turbulence (0..1, 0 = none),
+#   base-agl-ft   cloud base above the ground at that spot
+var place_weather = func {
+    var p = props.globals.getNode("/wxradar/place", 1);
+    if (!contains(globals, "local_weather") or !contains(local_weather, "effectVolumeArray")
+        or !getprop("/nasal/local_weather/enabled")) {
+        p.getNode("result", 1).setValue("FAILED: Detailed Weather is off");
+        return;
+    }
+    # Values come over telnet as text: make them numbers.
+    var kind = p.getValue("kind");
+    var lat = num(p.getValue("latitude-deg"));
+    var lon = num(p.getValue("longitude-deg"));
+    var radius = num(p.getValue("radius-m"));
+    var rain = num(p.getValue("rain"));
+    var turb = num(p.getValue("turbulence"));
+    var base_agl = num(p.getValue("base-agl-ft"));
+    if (lat == nil or lon == nil or radius == nil or rain == nil or turb == nil or base_agl == nil) {
+        p.getNode("result", 1).setValue("FAILED: missing or bad values");
+        return;
+    }
+    var g = geodinfo(lat, lon);
+    var ground = (g == nil) ? (getprop("/position/ground-elev-ft") or 0) : g[0] * M2FT;
+    var base = ground + base_agl;
+
+    var vols = local_weather.effectVolumeArray;
+    var before = size(vols);
+    if (kind == "shower")
+        local_weather.create_cumulonimbus_cloud_rain(lat, lon, base, 1.0, rain);
+    elsif (kind == "cb")
+        local_weather.create_small_thunderstorm(lat, lon, base, 0.0);
+    elsif (radius > 5000)
+        local_weather.create_big_thunderstorm(lat, lon, base, 0.0);
+    else
+        local_weather.create_medium_thunderstorm(lat, lon, base, 0.0);
+
+    vols = local_weather.effectVolumeArray;     # FlightGear may replace the vector
+    var changed = 0;
+    for (var i = before; i < size(vols); i += 1) {
+        var ev = vols[i];
+        if (ev.rain_flag != 1) continue;
+        ev.r1 = radius;
+        ev.r2 = radius;
+        ev.rain = rain;
+        if (turb > 0) { ev.turb = turb; ev.turb_flag = 1; }
+        else          { ev.turb = -1;   ev.turb_flag = 0; }
+        changed += 1;
+    }
+    p.getNode("result", 1).setValue(sprintf("OK: %s at %.4f %.4f, base %d ft, %d volume(s)",
+                                            kind, lat, lon, base, changed));
+};
+
+setlistener("/wxradar/place/request", func(n) {
+    if (!alive()) return;
+    var p = props.globals.getNode("/wxradar/place", 1);
+    if (n.getValue() == p.getValue("done")) return;
+    p.getNode("done", 1).setValue(n.getValue());
+    call(place_weather, [], nil, nil, var err = []);
+    if (size(err)) {
+        p.getNode("result", 1).setValue("FAILED: " ~ err[0]);
+        logprint(LOG_WARN, "wxradar_export place: ", err[0]);
+    }
+}, 0, 1);
 
 settimer(volume_loop, 2, 1);
 settimer(terrain_loop, 3, 1);

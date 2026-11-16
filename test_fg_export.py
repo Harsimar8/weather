@@ -19,7 +19,7 @@ payload = {
 }
 
 request = urllib.request.Request(
-    "http://localhost:8080/run.cgi?value=nasal",
+    "http://127.0.0.1:8081/run.cgi?value=nasal",
     data=json.dumps(payload).encode("utf-8"),
     headers={"Content-Type": "application/json"},
     method="POST"

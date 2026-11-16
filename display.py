@@ -1,8 +1,9 @@
 """ND-style weather radar display widget (PySide6), Boeing style, track up."""
 import math
+import time
 
 import numpy as np
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QWidget
 
@@ -22,6 +23,9 @@ MAGENTA = QColor(235, 70, 235)
 
 
 class RadarDisplay(QWidget):
+    # Click on the radar picture: (degrees right of the track line, distance NM)
+    clicked = Signal(float, float)
+
     def __init__(self, scanner, parent=None):
         super().__init__(parent)
         self.setMinimumSize(480, 360)
@@ -38,6 +42,7 @@ class RadarDisplay(QWidget):
                      "source": "SIM", "pws": None,
                      "wx_src": None, "gnd_clutter": False}
         self.frame = QImage()
+        self.marks = []           # recent clicks: (rel_deg, dist_nm, until)
         self._build_pixel_map()
 
     def _build_pixel_map(self):
@@ -151,6 +156,7 @@ class RadarDisplay(QWidget):
                 p.restore()
 
         self._draw_heading_marks(p)
+        self._draw_marks(p)
 
         # Track line, sweep, aircraft symbol
         p.setPen(QPen(MAGENTA, 2))
@@ -335,6 +341,38 @@ class RadarDisplay(QWidget):
             text, careful = src
             p.setPen(AMBER if careful else CYAN)
             p.drawText(QPointF(x, y + 66), text)
+
+    def _draw_marks(self, p):
+        """Cyan cross where weather was just placed (shown a few seconds)."""
+        now = time.perf_counter()
+        self.marks = [m for m in self.marks if m[2] > now]
+        rng = self.info["range"]
+        p.setPen(QPen(CYAN, 2))
+        for rel, dist, _ in self.marks:
+            if dist > rng:
+                continue
+            c = self._polar(R * dist / rng, rel)
+            p.drawLine(QPointF(c.x() - 7, c.y()), QPointF(c.x() + 7, c.y()))
+            p.drawLine(QPointF(c.x(), c.y() - 7), QPointF(c.x(), c.y() + 7))
+
+    def mark(self, rel_deg, dist_nm, seconds=6.0):
+        self.marks.append((rel_deg, dist_nm, time.perf_counter() + seconds))
+        self.update()
+
+    def mousePressEvent(self, event):
+        """Turn a left click into (degrees right of the track line, NM)."""
+        if event.button() != Qt.LeftButton:
+            return super().mousePressEvent(event)
+        scale = min(self.width() / W, self.height() / H)
+        ox, oy = (self.width() - W * scale) / 2, (self.height() - H * scale) / 2
+        pos = event.position()
+        x, y = (pos.x() - ox) / scale, (pos.y() - oy) / scale
+        dx, dy = x - CX, CY - y
+        r = math.hypot(dx, dy)
+        rel = math.degrees(math.atan2(dx, dy))
+        if dy < 0 or r > R or abs(rel) > self.half:
+            return
+        self.clicked.emit(rel, r / R * self.info["range"])
 
     def paintEvent(self, _event):
         img = self.render_frame()
