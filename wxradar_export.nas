@@ -165,6 +165,12 @@ var place_weather = func {
 
     var vols = local_weather.effectVolumeArray;
     var before = size(vols);
+    # With threading on (the default) the create_* calls only QUEUE the cloud
+    # models; FlightGear draws the queue when it finishes building a weather
+    # tile. Remember the queue sizes so the new clouds can be drawn now.
+    var lw = local_weather;
+    var q_new = size(lw.cloudAssemblyArray);
+    var q_old = size(lw.clouds_path);
     if (kind == "shower")
         local_weather.create_cumulonimbus_cloud_rain(lat, lon, base, 1.0, rain);
     elsif (kind == "cb")
@@ -186,8 +192,58 @@ var place_weather = func {
         else          { ev.turb = -1;   ev.turb_flag = 0; }
         changed += 1;
     }
-    p.getNode("result", 1).setValue(sprintf("OK: %s at %.4f %.4f, base %d ft, %d volume(s)",
-                                            kind, lat, lon, base, changed));
+    var shown = draw_queued_clouds(q_new, q_old);
+    p.getNode("result", 1).setValue(sprintf("OK: %s at %.4f %.4f, base %d ft, %d volume(s), %d cloud(s)",
+                                            kind, lat, lon, base, changed, shown));
+};
+
+# Take the clouds that place_weather just queued out of Detailed Weather's
+# queues and draw them now (a few per frame), instead of waiting for the next
+# weather tile. Returns how many clouds were taken.
+var draw_queued_clouds = func(q_new, q_old) {
+    var lw = local_weather;
+    # New cloud system (cloud objects).
+    var mine_new = [];
+    var n = size(lw.cloudAssemblyArray);
+    if (n > q_new) {
+        mine_new = subvec(lw.cloudAssemblyArray, q_new);
+        setsize(lw.cloudAssemblyArray, q_new);
+    }
+    # Model-path clouds (rain textures, older cloud models).
+    var mine_old = [];
+    n = size(lw.clouds_path);
+    if (n > q_old) {
+        for (var i = q_old; i < n; i += 1)
+            append(mine_old, [lw.clouds_path[i], lw.clouds_lat[i], lw.clouds_lon[i],
+                              lw.clouds_alt[i], lw.clouds_orientation[i]]);
+        setsize(lw.clouds_path, q_old);
+        setsize(lw.clouds_lat, q_old);
+        setsize(lw.clouds_lon, q_old);
+        setsize(lw.clouds_alt, q_old);
+        setsize(lw.clouds_orientation, q_old);
+        if (lw.dynamics_flag == 1 and size(lw.clouds_mean_alt) > q_old) {
+            setsize(lw.clouds_mean_alt, q_old);
+            setsize(lw.clouds_flt, q_old);
+            setsize(lw.clouds_evolution_timestamp, q_old);
+        }
+    }
+    var k = 0;
+    var step = func {
+        var stop = math.min(size(mine_new) + size(mine_old), k + 20);
+        for (; k < stop; k += 1) {
+            if (k < size(mine_new))
+                lw.create_cloud_new(mine_new[k]);
+            else {
+                var c = mine_old[k - size(mine_new)];
+                lw.create_cloud(c[0], c[1], c[2], c[3], c[4]);
+            }
+        }
+        if (k < size(mine_new) + size(mine_old))
+            settimer(step, 0, 1);
+    };
+    call(step, [], nil, nil, var err = []);
+    if (size(err)) logprint(LOG_WARN, "wxradar_export draw clouds: ", err[0]);
+    return size(mine_new) + size(mine_old);
 };
 
 setlistener("/wxradar/place/request", func(n) {

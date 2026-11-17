@@ -1051,14 +1051,320 @@ WEATHER  : Detailed Weather ON, tile type 'thunderstorms'
 AIRCRAFT : lat 28.567004, lon 77.077607, alt 3508 ft
 VOLUMES  : 30
 ==============================================================================
+==============================================================================
+TIME     : 2026-11-17 12:19:35
+WEATHER  : Detailed Weather ON, tile type 'thunderstorms'
+AIRCRAFT : lat 28.568868, lon 77.145031, alt 2341 ft
+VOLUMES  : 0
+==============================================================================
+No effect volumes. Detailed Weather is off, or not loaded yet,
+or wxradar_export.nas is not running. Radar shows no Detailed Weather.
+
+SUMMARY: no rain volumes -> radar stays empty
+
+==============================================================================
+TIME     : 2026-11-17 12:26:07
+WEATHER  : Detailed Weather ON, tile type 'METAR'
+AIRCRAFT : lat 28.571925, lon 77.141401, alt 2038 ft
+VOLUMES  : 0
+==============================================================================
+No effect volumes. Detailed Weather is off, or not loaded yet,
+or wxradar_export.nas is not running. Radar shows no Detailed Weather.
+
+SUMMARY: no rain volumes -> radar stays empty
+
+==============================================================================
+TIME     : 2026-11-17 12:26:10
+WEATHER  : Detailed Weather ON, tile type 'METAR'
+AIRCRAFT : lat 28.570868, lon 77.140564, alt 1817 ft
+VOLUMES  : 8
+==============================================================================
+
+--- volume 0 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         2   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.6907   centre latitude
+  longitude-deg              77.2073   centre longitude
+  r1-m                         10000   size 1 in metres (radius / half-length)
+  r2-m                          6000   size 2 in metres (radius / half-width)
+  heading-deg                 270.13   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               2477   top of the volume, ft above sea level
+  visibility                 5083.33   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.166667   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
+  lift-flag                        0   1 = value above is used, 0 = ignore it
+  saturation                    0.95   humidity / cloud wetness 0..1
+  saturation-flag                  1   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : ellipse 20 x 12 km, turned 270 deg
+    Height: 0 ft to 2477 ft (2477 ft thick)
+    Centre: 8.0 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : visibility 5083 m, rain 0.17 (light), humidity 0.95
+    Means : RAIN CELL / shower
+    Radar : 24 dBZ -> GREEN
+
+--- volume 1 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         2   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.6907   centre latitude
+  longitude-deg              77.2073   centre longitude
+  r1-m                          9000   size 1 in metres (radius / half-length)
+  r2-m                          5000   size 2 in metres (radius / half-width)
+  heading-deg                 270.13   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               1277   top of the volume, ft above sea level
+  visibility                 4166.67   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.333333   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
+  lift-flag                        0   1 = value above is used, 0 = ignore it
+  saturation                     0.8   humidity / cloud wetness 0..1
+  saturation-flag                  1   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : ellipse 18 x 10 km, turned 270 deg
+    Height: 0 ft to 1277 ft (1277 ft thick)
+    Centre: 8.0 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 4167 m, rain 0.33 (moderate), humidity 0.80
+    Means : RAIN CELL / shower
+    Radar : 31 dBZ -> YELLOW
+
+--- volume 2 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         2   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.6226   centre latitude
+  longitude-deg              77.1298   centre longitude
+  r1-m                         10000   size 1 in metres (radius / half-length)
+  r2-m                          6000   size 2 in metres (radius / half-width)
+  heading-deg                126.168   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               2477   top of the volume, ft above sea level
+  visibility                 5083.33   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.166667   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
+  lift-flag                        0   1 = value above is used, 0 = ignore it
+  saturation                    0.95   humidity / cloud wetness 0..1
+  saturation-flag                  1   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : ellipse 20 x 12 km, turned 126 deg
+    Height: 0 ft to 2477 ft (2477 ft thick)
+    Centre: 3.2 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : visibility 5083 m, rain 0.17 (light), humidity 0.95
+    Means : RAIN CELL / shower
+    Radar : 24 dBZ -> GREEN
+
+--- volume 3 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         2   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.6226   centre latitude
+  longitude-deg              77.1298   centre longitude
+  r1-m                          9000   size 1 in metres (radius / half-length)
+  r2-m                          5000   size 2 in metres (radius / half-width)
+  heading-deg                126.168   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               1277   top of the volume, ft above sea level
+  visibility                 4166.67   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.333333   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
+  lift-flag                        0   1 = value above is used, 0 = ignore it
+  saturation                     0.8   humidity / cloud wetness 0..1
+  saturation-flag                  1   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : ellipse 18 x 10 km, turned 126 deg
+    Height: 0 ft to 1277 ft (1277 ft thick)
+    Centre: 3.2 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 4167 m, rain 0.33 (moderate), humidity 0.80
+    Means : RAIN CELL / shower
+    Radar : 31 dBZ -> YELLOW
+
+--- volume 4 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         2   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.4785   centre latitude
+  longitude-deg              77.0425   centre longitude
+  r1-m                         10000   size 1 in metres (radius / half-length)
+  r2-m                          6000   size 2 in metres (radius / half-width)
+  heading-deg                128.093   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               2477   top of the volume, ft above sea level
+  visibility                 5083.33   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.166667   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
+  lift-flag                        0   1 = value above is used, 0 = ignore it
+  saturation                    0.95   humidity / cloud wetness 0..1
+  saturation-flag                  1   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : ellipse 20 x 12 km, turned 128 deg
+    Height: 0 ft to 2477 ft (2477 ft thick)
+    Centre: 7.6 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : visibility 5083 m, rain 0.17 (light), humidity 0.95
+    Means : RAIN CELL / shower
+    Radar : 24 dBZ -> GREEN
+
+--- volume 5 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         2   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.4785   centre latitude
+  longitude-deg              77.0425   centre longitude
+  r1-m                          9000   size 1 in metres (radius / half-length)
+  r2-m                          5000   size 2 in metres (radius / half-width)
+  heading-deg                128.093   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               1277   top of the volume, ft above sea level
+  visibility                 4166.67   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.333333   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
+  lift-flag                        0   1 = value above is used, 0 = ignore it
+  saturation                     0.8   humidity / cloud wetness 0..1
+  saturation-flag                  1   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : ellipse 18 x 10 km, turned 128 deg
+    Height: 0 ft to 1277 ft (1277 ft thick)
+    Centre: 7.6 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 4167 m, rain 0.33 (moderate), humidity 0.80
+    Means : RAIN CELL / shower
+    Radar : 31 dBZ -> YELLOW
+
+--- volume 6 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         3   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.5718   centre latitude
+  longitude-deg               77.141   centre longitude
+  r1-m                         20000   size 1 in metres (radius / half-length)
+  r2-m                         20000   size 2 in metres (radius / half-width)
+  heading-deg                    150   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               2577   top of the volume, ft above sea level
+  visibility                 5083.33   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.166667   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
+  lift-flag                        0   1 = value above is used, 0 = ignore it
+  saturation                    0.95   humidity / cloud wetness 0..1
+  saturation-flag                  1   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : 40 x 40 km box, turned 150 deg
+    Height: 0 ft to 2577 ft (2577 ft thick)
+    Centre: 0.1 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : visibility 5083 m, rain 0.17 (light), humidity 0.95
+    Means : RAIN CELL / shower
+    Radar : 24 dBZ -> GREEN
+
+--- volume 7 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         3   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.5718   centre latitude
+  longitude-deg               77.141   centre longitude
+  r1-m                         16000   size 1 in metres (radius / half-length)
+  r2-m                         16000   size 2 in metres (radius / half-width)
+  heading-deg                    150   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               1377   top of the volume, ft above sea level
+  visibility                 4166.67   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.333333   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
+  lift-flag                        0   1 = value above is used, 0 = ignore it
+  saturation                     0.9   humidity / cloud wetness 0..1
+  saturation-flag                  1   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : 32 x 32 km box, turned 150 deg
+    Height: 0 ft to 1377 ft (1377 ft thick)
+    Centre: 0.1 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 4167 m, rain 0.33 (moderate), humidity 0.90
+    Means : RAIN CELL / shower
+    Radar : 31 dBZ -> YELLOW
+
+SUMMARY: 8 rain volume(s) -> radar shows echoes
+==============================================================================
+TIME     : 2026-11-17 14:42:34
+WEATHER  : Detailed Weather ON, tile type 'METAR'
+AIRCRAFT : lat 28.534973, lon 77.30608, alt 5967 ft
+VOLUMES  : 23
+==============================================================================
 
 --- volume 0 ------------------------------------------------------------
   RAW VALUES                         MEANING
   geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5184   centre latitude
-  longitude-deg              77.0424   centre longitude
-  r1-m                        4007.9   size 1 in metres (radius / half-length)
-  r2-m                        4007.9   size 2 in metres (radius / half-width)
+  latitude-deg                28.607   centre latitude
+  longitude-deg              77.3905   centre longitude
+  r1-m                       2187.42   size 1 in metres (radius / half-length)
+  r2-m                       2187.42   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft              20000   top of the volume, ft above sea level
+  visibility                    1100   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                           0.8   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                     0.6   turbulence 0..1  (TURB mode)
+  turbulence-flag                  1   1 = value above is used, 0 = ignore it
+  lift                            15   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 4 km across, turned 0 deg
+    Height: 0 ft to 20000 ft (20000 ft thick)
+    Centre: 6.2 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : visibility 1100 m, rain 0.80 (heavy), turbulence 0.60 (heavy), lift 15.0
+    Means : RAIN CELL / shower with turbulence (storm)
+    Radar : 49 dBZ -> RED; shows in TURB mode
+
+--- volume 1 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.4283   centre latitude
+  longitude-deg              77.3455   centre longitude
+  r1-m                       3700.92   size 1 in metres (radius / half-length)
+  r2-m                       3700.92   size 2 in metres (radius / half-width)
   heading-deg                      0   rotation of the shape
   base-altitude-ft                 0   bottom of the volume, ft above sea level
   top-altitude-ft              20000   top of the volume, ft above sea level
@@ -1075,20 +1381,110 @@ VOLUMES  : 30
   saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
   saturation-flag                  0   1 = value above is used, 0 = ignore it
   EXPLANATION
-    Shape : circle 8 km across, turned 0 deg
+    Shape : circle 7 km across, turned 0 deg
     Height: 0 ft to 20000 ft (20000 ft thick)
-    Centre: 3.5 NM from aircraft; aircraft altitude IS inside this height band
+    Centre: 6.7 NM from aircraft; aircraft altitude IS inside this height band
     Sets  : visibility 1100 m, rain 1.00 (very heavy), turbulence 0.80 (heavy), lift 20.0
     Means : RAIN CELL / shower with turbulence (storm)
-    Radar : 49 dBZ -> RED; shows in TURB mode
+    Radar : 57 dBZ -> MAGENTA; shows in TURB mode
 
---- volume 1 ------------------------------------------------------------
+--- volume 2 ------------------------------------------------------------
   RAW VALUES                         MEANING
   geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.4988   centre latitude
-  longitude-deg              77.0712   centre longitude
-  r1-m                       2416.86   size 1 in metres (radius / half-length)
-  r2-m                       2416.86   size 2 in metres (radius / half-width)
+  latitude-deg               28.5667   centre latitude
+  longitude-deg               77.189   centre longitude
+  r1-m                          2000   size 1 in metres (radius / half-length)
+  r2-m                          2000   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               4605   top of the volume, ft above sea level
+  visibility                 10951.4   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                       0.19899   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 4 km across, turned 0 deg
+    Height: 0 ft to 4605 ft (4605 ft thick)
+    Centre: 6.5 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 10951 m, rain 0.20 (light), lift -1.0
+    Means : RAIN CELL / shower
+    Radar : 25 dBZ -> GREEN
+
+--- volume 3 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.6172   centre latitude
+  longitude-deg              77.1633   centre longitude
+  r1-m                          2000   size 1 in metres (radius / half-length)
+  r2-m                          2000   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               4605   top of the volume, ft above sea level
+  visibility                 10881.5   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.103021   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 4 km across, turned 0 deg
+    Height: 0 ft to 4605 ft (4605 ft thick)
+    Centre: 9.0 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 10882 m, rain 0.10 (light), lift -1.0
+    Means : RAIN CELL / shower
+    Radar : 21 dBZ -> GREEN
+
+--- volume 4 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         3   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.5368   centre latitude
+  longitude-deg              77.3045   centre longitude
+  r1-m                         20000   size 1 in metres (radius / half-length)
+  r2-m                         20000   size 2 in metres (radius / half-width)
+  heading-deg                    280   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               6605   top of the volume, ft above sea level
+  visibility                      -1   visibility inside, metres  [flag 0: not used]
+  visibility-flag                  0   1 = value above is used, 0 = ignore it
+  rain                            -1   rain 0..1  (drives radar colour)  [flag 0: not used]
+  rain-flag                        0   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                     0.4   turbulence 0..1  (TURB mode)
+  turbulence-flag                  1   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
+  lift-flag                        0   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : 40 x 40 km box, turned 280 deg
+    Height: 0 ft to 6605 ft (6605 ft thick)
+    Centre: 0.1 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : turbulence 0.40 (moderate)
+    Means : TURBULENCE zone (clear air)
+    Radar : no echo (no rain in this volume); shows in TURB mode
+
+--- volume 5 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.3867   centre latitude
+  longitude-deg              77.7606   centre longitude
+  r1-m                       2671.05   size 1 in metres (radius / half-length)
+  r2-m                       2671.05   size 2 in metres (radius / half-width)
   heading-deg                      0   rotation of the shape
   base-altitude-ft                 0   bottom of the volume, ft above sea level
   top-altitude-ft              20000   top of the volume, ft above sea level
@@ -1107,174 +1503,54 @@ VOLUMES  : 30
   EXPLANATION
     Shape : circle 5 km across, turned 0 deg
     Height: 0 ft to 20000 ft (20000 ft thick)
-    Centre: 4.1 NM from aircraft; aircraft altitude IS inside this height band
+    Centre: 25.6 NM from aircraft; aircraft altitude IS inside this height band
     Sets  : visibility 1100 m, rain 0.80 (heavy), turbulence 0.60 (heavy), lift 15.0
     Means : RAIN CELL / shower with turbulence (storm)
-    Radar : 42 dBZ -> RED; shows in TURB mode
-
---- volume 2 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.6658   centre latitude
-  longitude-deg              77.1973   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 13333.2   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.156342   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 8.7 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 13333 m, rain 0.16 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 18 dBZ -> nothing (below 20 dBZ)
-p
---- volume 3 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.3701   centre latitude
-  longitude-deg              77.0486   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 11339.8   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.112581   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 11.9 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 11340 m, rain 0.11 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 16 dBZ -> nothing (below 20 dBZ)
-
---- volume 4 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.6322   centre latitude
-  longitude-deg              76.9692   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 8188.09   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.147813   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 6.9 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 8188 m, rain 0.15 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 17 dBZ -> nothing (below 20 dBZ)
-
---- volume 5 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.7595   centre latitude
-  longitude-deg              77.0795   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 10205.6   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.198797   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 11.6 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 10206 m, rain 0.20 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 19 dBZ -> nothing (below 20 dBZ)
+    Radar : 49 dBZ -> RED; shows in TURB mode
 
 --- volume 6 ------------------------------------------------------------
   RAW VALUES                         MEANING
   geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5092   centre latitude
-  longitude-deg              76.8818   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
+  latitude-deg               28.4444   centre latitude
+  longitude-deg              77.7246   centre longitude
+  r1-m                       2203.73   size 1 in metres (radius / half-length)
+  r2-m                       2203.73   size 2 in metres (radius / half-width)
   heading-deg                      0   rotation of the shape
   base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                   10887   visibility inside, metres
+  top-altitude-ft              20000   top of the volume, ft above sea level
+  visibility                    1100   visibility inside, metres
   visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.116326   rain 0..1  (drives radar colour)
+  rain                           0.8   rain 0..1  (drives radar colour)
   rain-flag                        1   1 = value above is used, 0 = ignore it
   snow                            -1   snow 0..1  [flag 0: not used]
   snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
+  turbulence                     0.6   turbulence 0..1  (TURB mode)
+  turbulence-flag                  1   1 = value above is used, 0 = ignore it
+  lift                            15   vertical air movement (thermal lift)
   lift-flag                        1   1 = value above is used, 0 = ignore it
   saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
   saturation-flag                  0   1 = value above is used, 0 = ignore it
   EXPLANATION
     Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 10.9 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 10887 m, rain 0.12 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 16 dBZ -> nothing (below 20 dBZ)
+    Height: 0 ft to 20000 ft (20000 ft thick)
+    Centre: 22.7 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : visibility 1100 m, rain 0.80 (heavy), turbulence 0.60 (heavy), lift 15.0
+    Means : RAIN CELL / shower with turbulence (storm)
+    Radar : 49 dBZ -> RED; shows in TURB mode
 
 --- volume 7 ------------------------------------------------------------
   RAW VALUES                         MEANING
   geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.4458   centre latitude
-  longitude-deg               76.933   centre longitude
+  latitude-deg               28.4292   centre latitude
+  longitude-deg              77.5685   centre longitude
   r1-m                          2000   size 1 in metres (radius / half-length)
   r2-m                          2000   size 2 in metres (radius / half-width)
   heading-deg                      0   rotation of the shape
   base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 9565.93   visibility inside, metres
+  top-altitude-ft               4605   top of the volume, ft above sea level
+  visibility                 11289.3   visibility inside, metres
   visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.120903   rain 0..1  (drives radar colour)
+  rain                      0.122871   rain 0..1  (drives radar colour)
   rain-flag                        1   1 = value above is used, 0 = ignore it
   snow                            -1   snow 0..1  [flag 0: not used]
   snow-flag                        0   1 = value above is used, 0 = ignore it
@@ -1286,25 +1562,25 @@ p
   saturation-flag                  0   1 = value above is used, 0 = ignore it
   EXPLANATION
     Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 10.5 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 9566 m, rain 0.12 (light), lift -1.0
+    Height: 0 ft to 4605 ft (4605 ft thick)
+    Centre: 15.2 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 11289 m, rain 0.12 (light), lift -1.0
     Means : RAIN CELL / shower
-    Radar : 16 dBZ -> nothing (below 20 dBZ)
+    Radar : 22 dBZ -> GREEN
 
 --- volume 8 ------------------------------------------------------------
   RAW VALUES                         MEANING
   geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5647   centre latitude
-  longitude-deg              77.1825   centre longitude
+  latitude-deg               28.5345   centre latitude
+  longitude-deg              77.8725   centre longitude
   r1-m                          2000   size 1 in metres (radius / half-length)
   r2-m                          2000   size 2 in metres (radius / half-width)
   heading-deg                      0   rotation of the shape
   base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 13291.7   visibility inside, metres
+  top-altitude-ft               4605   top of the volume, ft above sea level
+  visibility                 8812.69   visibility inside, metres
   visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.130506   rain 0..1  (drives radar colour)
+  rain                      0.150145   rain 0..1  (drives radar colour)
   rain-flag                        1   1 = value above is used, 0 = ignore it
   snow                            -1   snow 0..1  [flag 0: not used]
   snow-flag                        0   1 = value above is used, 0 = ignore it
@@ -1316,622 +1592,22 @@ p
   saturation-flag                  0   1 = value above is used, 0 = ignore it
   EXPLANATION
     Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 5.5 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 13292 m, rain 0.13 (light), lift -1.0
+    Height: 0 ft to 4605 ft (4605 ft thick)
+    Centre: 29.9 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 8813 m, rain 0.15 (light), lift -1.0
     Means : RAIN CELL / shower
-    Radar : 17 dBZ -> nothing (below 20 dBZ)
+    Radar : 23 dBZ -> GREEN
 
 --- volume 9 ------------------------------------------------------------
   RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.3918   centre latitude
-  longitude-deg              77.1245   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                   13736   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.163264   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 10.8 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 13736 m, rain 0.16 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 18 dBZ -> nothing (below 20 dBZ)
-
---- volume 10 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.6006   centre latitude
-  longitude-deg              77.1129   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                   13356   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                       0.11077   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 2.7 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 13356 m, rain 0.11 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 16 dBZ -> nothing (below 20 dBZ)
-
---- volume 11 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.6451   centre latitude
-  longitude-deg              77.0139   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 14019.6   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.290256   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 5.8 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 14020 m, rain 0.29 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 23 dBZ -> GREEN
-
---- volume 12 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg                28.504   centre latitude
-  longitude-deg              77.1316   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 14313.8   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.298726   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 4.7 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 14314 m, rain 0.30 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 23 dBZ -> GREEN
-
---- volume 13 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.7276   centre latitude
-  longitude-deg              77.0188   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 15831.3   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.142873   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 10.1 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 15831 m, rain 0.14 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 17 dBZ -> nothing (below 20 dBZ)
-
---- volume 14 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5865   centre latitude
-  longitude-deg              77.2581   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                   11992   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.124412   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 9.6 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 11992 m, rain 0.12 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 16 dBZ -> nothing (below 20 dBZ)
-
---- volume 15 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.4348   centre latitude
-  longitude-deg              77.0607   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 13874.3   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.147829   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 8.0 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 13874 m, rain 0.15 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 17 dBZ -> nothing (below 20 dBZ)
-
---- volume 16 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5413   centre latitude
-  longitude-deg              77.3126   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                  8164.3   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.142109   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 12.5 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 8164 m, rain 0.14 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 17 dBZ -> nothing (below 20 dBZ)
-
---- volume 17 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.6249   centre latitude
-  longitude-deg              77.1374   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 15823.9   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.172424   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 4.7 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 15824 m, rain 0.17 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 18 dBZ -> nothing (below 20 dBZ)
-
---- volume 18 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5067   centre latitude
-  longitude-deg              76.9039   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 10738.3   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.265968   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 9.9 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 10738 m, rain 0.27 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 22 dBZ -> GREEN
-
---- volume 19 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.6283   centre latitude
-  longitude-deg              76.8655   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 15893.9   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.237471   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 11.8 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 15894 m, rain 0.24 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 21 dBZ -> GREEN
-
---- volume 20 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.6994   centre latitude
-  longitude-deg              77.0634   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 15659.2   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.272811   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 8.0 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 15659 m, rain 0.27 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 22 dBZ -> GREEN
-
---- volume 21 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.7143   centre latitude
-  longitude-deg              77.1113   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 8583.69   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.225981   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 9.0 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 8584 m, rain 0.23 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 20 dBZ -> GREEN
-
---- volume 22 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5906   centre latitude
-  longitude-deg              77.0554   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 12034.7   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.247806   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 1.8 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 12035 m, rain 0.25 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 21 dBZ -> GREEN
-
---- volume 23 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg                 28.54   centre latitude
-  longitude-deg              77.1363   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                   15014   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.274284   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 3.5 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 15014 m, rain 0.27 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 22 dBZ -> GREEN
-
---- volume 24 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg                 28.38   centre latitude
-  longitude-deg              76.9824   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 14654.4   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.292583   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 12.3 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 14654 m, rain 0.29 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 23 dBZ -> GREEN
-
---- volume 25 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg                28.442   centre latitude
-  longitude-deg              77.0772   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 11576.2   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                       0.24677   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 7.5 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 11576 m, rain 0.25 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 21 dBZ -> GREEN
-
---- volume 26 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5077   centre latitude
-  longitude-deg              77.2478   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 12403.4   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.235555   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 9.7 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 12403 m, rain 0.24 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 21 dBZ -> GREEN
-
---- volume 27 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.7609   centre latitude
-  longitude-deg              77.0856   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 11514.2   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.164477   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 11.7 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 11514 m, rain 0.16 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 18 dBZ -> nothing (below 20 dBZ)
-
---- volume 28 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5011   centre latitude
-  longitude-deg              77.2589   centre longitude
-  r1-m                          2000   size 1 in metres (radius / half-length)
-  r2-m                          2000   size 2 in metres (radius / half-width)
-  heading-deg                      0   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            5745.55   top of the volume, ft above sea level
-  visibility                 10339.8   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                      0.250168   rain 0..1  (drives radar colour)
-  rain-flag                        1   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)
-  lift-flag                        1   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : circle 4 km across, turned 0 deg
-    Height: 0 ft to 5746 ft (5746 ft thick)
-    Centre: 10.3 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : visibility 10340 m, rain 0.25 (light), lift -1.0
-    Means : RAIN CELL / shower
-    Radar : 21 dBZ -> GREEN
-
---- volume 29 ------------------------------------------------------------
-  RAW VALUES                         MEANING
   geometry                         3   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5674   centre latitude
-  longitude-deg              77.0798   centre longitude
+  latitude-deg               28.4776   centre latitude
+  longitude-deg              77.6869   centre longitude
   r1-m                         20000   size 1 in metres (radius / half-length)
   r2-m                         20000   size 2 in metres (radius / half-width)
-  heading-deg                    150   rotation of the shape
+  heading-deg                    280   rotation of the shape
   base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            7745.55   top of the volume, ft above sea level
+  top-altitude-ft               6605   top of the volume, ft above sea level
   visibility                      -1   visibility inside, metres  [flag 0: not used]
   visibility-flag                  0   1 = value above is used, 0 = ignore it
   rain                            -1   rain 0..1  (drives radar colour)  [flag 0: not used]
@@ -1945,81 +1621,413 @@ p
   saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
   saturation-flag                  0   1 = value above is used, 0 = ignore it
   EXPLANATION
-    Shape : 40 x 40 km box, turned 150 deg
-    Height: 0 ft to 7746 ft (7746 ft thick)
-    Centre: 0.1 NM from aircraft; aircraft altitude IS inside this height band
+    Shape : 40 x 40 km box, turned 280 deg
+    Height: 0 ft to 6605 ft (6605 ft thick)
+    Centre: 20.4 NM from aircraft; aircraft altitude IS inside this height band
     Sets  : turbulence 0.40 (moderate)
     Means : TURBULENCE zone (clear air)
     Radar : no echo (no rain in this volume); shows in TURB mode
 
-SUMMARY: 29 rain volume(s) -> radar shows echoes
-
-==============================================================================
-TIME     : 2026-11-16 15:39:11
-WEATHER  : Detailed Weather ON, tile type 'low_pressure'
-AIRCRAFT : lat 28.560183, lon 77.122341, alt 3260 ft
-VOLUMES  : 2
-==============================================================================
-
---- volume 0 ------------------------------------------------------------
+--- volume 10 ------------------------------------------------------------
   RAW VALUES                         MEANING
-  geometry                         3   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5653   centre latitude
-  longitude-deg              77.0969   centre longitude
-  r1-m                         20000   size 1 in metres (radius / half-length)
-  r2-m                         20000   size 2 in metres (radius / half-width)
-  heading-deg                    280   rotation of the shape
-  base-altitude-ft           4813.19   bottom of the volume, ft above sea level
-  top-altitude-ft            5713.19   top of the volume, ft above sea level
-  visibility                    2000   visibility inside, metres
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.2621   centre latitude
+  longitude-deg              77.1788   centre longitude
+  r1-m                       2430.14   size 1 in metres (radius / half-length)
+  r2-m                       2430.14   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft              20000   top of the volume, ft above sea level
+  visibility                    1100   visibility inside, metres
   visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                            -1   rain 0..1  (drives radar colour)  [flag 0: not used]
-  rain-flag                        0   1 = value above is used, 0 = ignore it
+  rain                           0.8   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                     0.6   turbulence 0..1  (TURB mode)
+  turbulence-flag                  1   1 = value above is used, 0 = ignore it
+  lift                            15   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 5 km across, turned 0 deg
+    Height: 0 ft to 20000 ft (20000 ft thick)
+    Centre: 17.7 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : visibility 1100 m, rain 0.80 (heavy), turbulence 0.60 (heavy), lift 15.0
+    Means : RAIN CELL / shower with turbulence (storm)
+    Radar : 49 dBZ -> RED; shows in TURB mode
+
+--- volume 11 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.1605   centre latitude
+  longitude-deg              77.2613   centre longitude
+  r1-m                       4078.77   size 1 in metres (radius / half-length)
+  r2-m                       4078.77   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft              20000   top of the volume, ft above sea level
+  visibility                    1100   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                             1   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                     0.8   turbulence 0..1  (TURB mode)
+  turbulence-flag                  1   1 = value above is used, 0 = ignore it
+  lift                            20   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 8 km across, turned 0 deg
+    Height: 0 ft to 20000 ft (20000 ft thick)
+    Centre: 22.6 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : visibility 1100 m, rain 1.00 (very heavy), turbulence 0.80 (heavy), lift 20.0
+    Means : RAIN CELL / shower with turbulence (storm)
+    Radar : 57 dBZ -> MAGENTA; shows in TURB mode
+
+--- volume 12 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.2262   centre latitude
+  longitude-deg              77.0207   centre longitude
+  r1-m                          2000   size 1 in metres (radius / half-length)
+  r2-m                          2000   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               4605   top of the volume, ft above sea level
+  visibility                 15020.7   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                       0.18201   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
   snow                            -1   snow 0..1  [flag 0: not used]
   snow-flag                        0   1 = value above is used, 0 = ignore it
   turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
   turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 4 km across, turned 0 deg
+    Height: 0 ft to 4605 ft (4605 ft thick)
+    Centre: 23.9 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 15021 m, rain 0.18 (light), lift -1.0
+    Means : RAIN CELL / shower
+    Radar : 25 dBZ -> GREEN
+
+--- volume 13 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg                28.041   centre latitude
+  longitude-deg              76.9788   centre longitude
+  r1-m                          2000   size 1 in metres (radius / half-length)
+  r2-m                          2000   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               4605   top of the volume, ft above sea level
+  visibility                 13242.5   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                       0.15015   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 4 km across, turned 0 deg
+    Height: 0 ft to 4605 ft (4605 ft thick)
+    Centre: 34.3 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 13242 m, rain 0.15 (light), lift -1.0
+    Means : RAIN CELL / shower
+    Radar : 23 dBZ -> GREEN
+
+--- volume 14 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               27.9915   centre latitude
+  longitude-deg              77.2809   centre longitude
+  r1-m                          2000   size 1 in metres (radius / half-length)
+  r2-m                          2000   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               4605   top of the volume, ft above sea level
+  visibility                 11741.3   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.180692   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 4 km across, turned 0 deg
+    Height: 0 ft to 4605 ft (4605 ft thick)
+    Centre: 32.7 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 11741 m, rain 0.18 (light), lift -1.0
+    Means : RAIN CELL / shower
+    Radar : 25 dBZ -> GREEN
+
+--- volume 15 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         3   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg                28.186   centre latitude
+  longitude-deg              77.2058   centre longitude
+  r1-m                         20000   size 1 in metres (radius / half-length)
+  r2-m                         20000   size 2 in metres (radius / half-width)
+  heading-deg                    280   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               6605   top of the volume, ft above sea level
+  visibility                      -1   visibility inside, metres  [flag 0: not used]
+  visibility-flag                  0   1 = value above is used, 0 = ignore it
+  rain                            -1   rain 0..1  (drives radar colour)  [flag 0: not used]
+  rain-flag                        0   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                     0.4   turbulence 0..1  (TURB mode)
+  turbulence-flag                  1   1 = value above is used, 0 = ignore it
   lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
   lift-flag                        0   1 = value above is used, 0 = ignore it
   saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
   saturation-flag                  0   1 = value above is used, 0 = ignore it
   EXPLANATION
     Shape : 40 x 40 km box, turned 280 deg
-    Height: 4813 ft to 5713 ft (900 ft thick)
-    Centre: 1.4 NM from aircraft; aircraft altitude is NOT inside this height band
-    Sets  : visibility 2000 m
-    Means : CLOUD layer (low visibility inside)
-    Radar : no echo (no rain in this volume)
+    Height: 0 ft to 6605 ft (6605 ft thick)
+    Centre: 21.6 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : turbulence 0.40 (moderate)
+    Means : TURBULENCE zone (clear air)
+    Radar : no echo (no rain in this volume); shows in TURB mode
 
---- volume 1 ------------------------------------------------------------
+--- volume 16 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.9437   centre latitude
+  longitude-deg              77.3068   centre longitude
+  r1-m                       2277.83   size 1 in metres (radius / half-length)
+  r2-m                       2277.83   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft              20000   top of the volume, ft above sea level
+  visibility                    1100   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                           0.8   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                     0.6   turbulence 0..1  (TURB mode)
+  turbulence-flag                  1   1 = value above is used, 0 = ignore it
+  lift                            15   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 5 km across, turned 0 deg
+    Height: 0 ft to 20000 ft (20000 ft thick)
+    Centre: 24.5 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : visibility 1100 m, rain 0.80 (heavy), turbulence 0.60 (heavy), lift 15.0
+    Means : RAIN CELL / shower with turbulence (storm)
+    Radar : 49 dBZ -> RED; shows in TURB mode
+
+--- volume 17 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.9668   centre latitude
+  longitude-deg              77.3409   centre longitude
+  r1-m                       2644.32   size 1 in metres (radius / half-length)
+  r2-m                       2644.32   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft              20000   top of the volume, ft above sea level
+  visibility                    1100   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                           0.8   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                     0.6   turbulence 0..1  (TURB mode)
+  turbulence-flag                  1   1 = value above is used, 0 = ignore it
+  lift                            15   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 5 km across, turned 0 deg
+    Height: 0 ft to 20000 ft (20000 ft thick)
+    Centre: 26.0 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : visibility 1100 m, rain 0.80 (heavy), turbulence 0.60 (heavy), lift 15.0
+    Means : RAIN CELL / shower with turbulence (storm)
+    Radar : 49 dBZ -> RED; shows in TURB mode
+
+--- volume 18 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.9436   centre latitude
+  longitude-deg              77.2156   centre longitude
+  r1-m                          2000   size 1 in metres (radius / half-length)
+  r2-m                          2000   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               4605   top of the volume, ft above sea level
+  visibility                 11950.8   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                       0.18202   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 4 km across, turned 0 deg
+    Height: 0 ft to 4605 ft (4605 ft thick)
+    Centre: 25.0 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 11951 m, rain 0.18 (light), lift -1.0
+    Means : RAIN CELL / shower
+    Radar : 25 dBZ -> GREEN
+
+--- volume 19 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.7914   centre latitude
+  longitude-deg              77.3028   centre longitude
+  r1-m                          2000   size 1 in metres (radius / half-length)
+  r2-m                          2000   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               4605   top of the volume, ft above sea level
+  visibility                 10262.1   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.186224   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 4 km across, turned 0 deg
+    Height: 0 ft to 4605 ft (4605 ft thick)
+    Centre: 15.4 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 10262 m, rain 0.19 (light), lift -1.0
+    Means : RAIN CELL / shower
+    Radar : 25 dBZ -> GREEN
+
+--- volume 20 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg               28.9548   centre latitude
+  longitude-deg              77.5093   centre longitude
+  r1-m                          2000   size 1 in metres (radius / half-length)
+  r2-m                          2000   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               4605   top of the volume, ft above sea level
+  visibility                 13318.8   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                      0.216994   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 4 km across, turned 0 deg
+    Height: 0 ft to 4605 ft (4605 ft thick)
+    Centre: 27.4 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 13319 m, rain 0.22 (light), lift -1.0
+    Means : RAIN CELL / shower
+    Radar : 26 dBZ -> GREEN
+
+--- volume 21 ------------------------------------------------------------
+  RAW VALUES                         MEANING
+  geometry                         1   shape: 1 circle, 2 ellipse, 3 rectangle
+  latitude-deg                28.897   centre latitude
+  longitude-deg              77.2598   centre longitude
+  r1-m                          2000   size 1 in metres (radius / half-length)
+  r2-m                          2000   size 2 in metres (radius / half-width)
+  heading-deg                      0   rotation of the shape
+  base-altitude-ft                 0   bottom of the volume, ft above sea level
+  top-altitude-ft               4605   top of the volume, ft above sea level
+  visibility                 13737.8   visibility inside, metres
+  visibility-flag                  1   1 = value above is used, 0 = ignore it
+  rain                       0.28982   rain 0..1  (drives radar colour)
+  rain-flag                        1   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
+  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  lift                            -1   vertical air movement (thermal lift)
+  lift-flag                        1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
+  EXPLANATION
+    Shape : circle 4 km across, turned 0 deg
+    Height: 0 ft to 4605 ft (4605 ft thick)
+    Centre: 21.9 NM from aircraft; aircraft altitude is NOT inside this height band
+    Sets  : visibility 13738 m, rain 0.29 (light), lift -1.0
+    Means : RAIN CELL / shower
+    Radar : 29 dBZ -> GREEN
+
+--- volume 22 ------------------------------------------------------------
   RAW VALUES                         MEANING
   geometry                         3   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5653   centre latitude
-  longitude-deg              77.0969   centre longitude
+  latitude-deg               28.8962   centre latitude
+  longitude-deg              77.3478   centre longitude
   r1-m                         20000   size 1 in metres (radius / half-length)
   r2-m                         20000   size 2 in metres (radius / half-width)
   heading-deg                    280   rotation of the shape
   base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            4813.19   top of the volume, ft above sea level
+  top-altitude-ft               6605   top of the volume, ft above sea level
   visibility                      -1   visibility inside, metres  [flag 0: not used]
   visibility-flag                  0   1 = value above is used, 0 = ignore it
   rain                            -1   rain 0..1  (drives radar colour)  [flag 0: not used]
   rain-flag                        0   1 = value above is used, 0 = ignore it
-  snow                             0   snow 0..1
-  snow-flag                        1   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
+  snow                            -1   snow 0..1  [flag 0: not used]
+  snow-flag                        0   1 = value above is used, 0 = ignore it
+  turbulence                     0.4   turbulence 0..1  (TURB mode)
+  turbulence-flag                  1   1 = value above is used, 0 = ignore it
   lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
   lift-flag                        0   1 = value above is used, 0 = ignore it
-  saturation                     0.9   humidity / cloud wetness 0..1
-  saturation-flag                  1   1 = value above is used, 0 = ignore it
+  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
+  saturation-flag                  0   1 = value above is used, 0 = ignore it
   EXPLANATION
     Shape : 40 x 40 km box, turned 280 deg
-    Height: 0 ft to 4813 ft (4813 ft thick)
-    Centre: 1.4 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : snow 0.00 (none), humidity 0.90
-    Means : air below the cloud base (humidity zone)
-    Radar : no echo (no rain in this volume)
+    Height: 0 ft to 6605 ft (6605 ft thick)
+    Centre: 21.8 NM from aircraft; aircraft altitude IS inside this height band
+    Sets  : turbulence 0.40 (moderate)
+    Means : TURBULENCE zone (clear air)
+    Radar : no echo (no rain in this volume); shows in TURB mode
+
+SUMMARY: 19 rain volume(s) -> radar shows echoes
+
+==============================================================================
+TIME     : 2026-11-17 14:53:49
+WEATHER  : Detailed Weather ON, tile type 'high_pressure'
+AIRCRAFT : lat 28.519959, lon 77.459806, alt 11815 ft
+VOLUMES  : 0
+==============================================================================
+No effect volumes. Detailed Weather is off, or not loaded yet,
+or wxradar_export.nas is not running. Radar shows no Detailed Weather.
 
 SUMMARY: no rain volumes -> radar stays empty
 

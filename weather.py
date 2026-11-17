@@ -283,6 +283,30 @@ def parse_metar(metar):
 
 
 
+# --- "Realistic" echo shape for FlightGear volumes --------------------------
+# FlightGear gives one flat value per volume. A real storm has a strong core,
+# weaker edges and changes with height, so in Realistic mode the app fills in
+# that shape. Position, size, heights and drift still come from FlightGear.
+SHAPE_K = 1.2          # strength = core * exp(-K d^2): about 30 % on the edge (d = 1)
+SHAPE_REACH = 1.5      # nothing beyond 1.5 x the volume's size
+EDGE_STRENGTH = 0.26   # the volume's edge is at least this (~21.5 dBZ, green)
+EDGE_RAGGED = 0.15     # ... and reaches up to 15 % past the edge in places
+TOP_FADE = 0.66        # strength lost at the top of a volume (about -25 dB)
+# Doppler-like turbulence: spectrum width in m/s (shown from 5 m/s, like a
+# real radar). The radar's turbulence scale is m/s / 10 (TURB_SHOW 0.5 = 5 m/s).
+SW_PER_TURB = 10.0     # FlightGear turbulence 1.0 = 10 m/s spread
+SW_WALL = 4.0          # extra spread on the core walls of strong storms (m/s)
+# Microburst under heavy rain volumes (for the F-factor windshear).
+MB_RAIN = 0.5          # rain above this can make a microburst
+MB_VMAX = 20.0         # strongest outflow, m/s (rain 1.0, turbulence 1.0)
+_HS = np.linspace(0.0, 5000.0, 501)
+_OUTFLOW_MAX = float(np.max((1 - np.exp(-_HS / 150.0)) * np.exp(-_HS / 1500.0)))
+
+
+def _clamp01(x):
+    return max(0.0, min(1.0, x or 0.0))
+
+
 class FlightGearWeather:
     """Convert FlightGear weather volumes into radar reflectivity."""
 
@@ -290,6 +314,9 @@ class FlightGearWeather:
         self.volumes = []
         self.origin = None
         self.altitude_ft = 0.0
+        self.realistic = False      # Echo shape: False = flat FlightGear data
+        self.noise = ValueNoise(11)
+        self._cache = (None, None, None, None)
 
     def update(self, volumes, origin, altitude_ft):
         """Update live volumes and aircraft position."""
@@ -320,7 +347,148 @@ class FlightGearWeather:
                 "r1": (v.get("r1-m") or 0) / 1852.0,
                 "r2": (v.get("r2-m") or 0) / 1852.0,
                 "angle": math.radians(v.get("heading-deg") or 0),
+                "seed": 37.0 * len(self.volumes),
             })
+
+    @staticmethod
+    def _dist(item, X, Y):
+        """Distance from the volume's centre, scaled so 1 = on its edge, plus
+        the point in the volume's own axes (NM). None if the shape is unusable."""
+        v = item["data"]
+        r1, r2, angle = item["r1"], item["r2"], item["angle"]
+        dx, dy = X - item["x"], Y - item["y"]
+        u = dx * math.cos(angle) - dy * math.sin(angle)
+        w = dx * math.sin(angle) + dy * math.cos(angle)
+        geometry = int(v.get("geometry") or 0)
+        if geometry == 1 and r1 > 0:
+            return np.sqrt(dx * dx + dy * dy) / r1, u, w
+        if geometry == 2 and r1 > 0 and r2 > 0:
+            return np.sqrt((u / r1) ** 2 + (w / r2) ** 2), u, w
+        if geometry == 3 and r1 > 0 and r2 > 0:
+            return np.maximum(np.abs(u) / r1, np.abs(w) / r2), u, w
+        return None, u, w
+
+    def _shapes(self, X, Y):
+        """Realistic shape of every volume on the points X, Y (worked out once
+        per scan and reused for each beam height)."""
+        c = self._cache
+        if c[0] is X and c[1] is Y and c[2] is self.volumes:
+            return c[3]
+        out = []
+        for item in self.volumes:
+            d, u, w = self._dist(item, X, Y)
+            near = None if d is None else d < SHAPE_REACH
+            if near is None or not near.any():
+                out.append(None)
+                continue
+            geometry = int(item["data"].get("geometry") or 0)
+            dn, k = d[near], item["seed"]
+            size = item["r1"] if geometry == 1 else max(item["r1"], item["r2"])
+            # Ragged texture tied to the volume, so it drifts with it.
+            un, wn = u[near] / size, w[near] / size
+            tex = (0.6 + 0.5 * self.noise(un / 0.6 + k, wn / 0.6 + k)
+                   + 0.25 * self.noise(un / 0.25 + k + 50, wn / 0.25 + 50))
+            # Texture as a gentle factor 0.85 .. 1.25 (capped at 1 below, so the
+            # strength never goes above FlightGear's value).
+            vary = 0.85 + 0.4 * np.clip((tex - 0.6) / 0.75, 0.0, 1.0)
+            if geometry == 3:
+                # Box = wide stratiform rain: even inside, soft ragged edges.
+                shape = np.clip((1.2 - dn) / 0.5, 0.0, 1.0) * tex
+                inner = np.minimum(vary, 1.0)
+                wall = np.zeros_like(dn)
+            else:
+                g = np.exp(-SHAPE_K * dn * dn)
+                shape = g * tex
+                # Inside: 1 at the centre down to 0 on the edge (FlightGear's
+                # value in the middle, down to green on the edge).
+                inner = np.clip((g - math.exp(-SHAPE_K)) / (1.0 - math.exp(-SHAPE_K))
+                                * vary, 0.0, 1.0)
+                # Core wall: where the echo changes fastest (peak = 1).
+                wall = (2 * SHAPE_K * dn * g
+                        / (math.sqrt(2 * SHAPE_K) * math.exp(-0.5)))
+            # The edge colour reaches the volume's edge everywhere, and a
+            # little past it in places (ragged), but never stops short of it.
+            filled = dn <= 1.0 + EDGE_RAGGED * np.clip((tex - 0.6) / 0.75, 0.0, 1.0)
+            # Turbulence comes in patches, not as a solid disc.
+            patch = 0.35 + 1.3 * self.noise(un / 0.35 + k + 90, wn / 0.35 + k + 7)
+            out.append((near, shape, wall, patch, inner, filled))
+        self._cache = (X, Y, self.volumes, out)
+        return out
+
+    def _realistic_field(self, X, Y, H):
+        rain_refl = np.zeros_like(X, dtype=float)
+        snow_refl = np.zeros_like(X, dtype=float)
+        turb = np.zeros_like(X, dtype=float)
+        for item, shp in zip(self.volumes, self._shapes(X, Y)):
+            if shp is None:
+                continue
+            v = item["data"]
+            base, top = v.get("base-altitude-ft"), v.get("top-altitude-ft")
+            if base is None or top is None:
+                continue
+            near, shape, wall, patch, inner, filled = shp
+
+            def strength(c):
+                """Realistic strength for a volume of FlightGear strength c:
+                c in the middle, down to green on the edge. Never stronger than
+                c, never smaller than the volume (only a ragged 15 % rim past it)."""
+                edge = min(c, EDGE_STRENGTH)
+                return np.where(filled, edge + (c - edge) * inner, 0.0)
+
+            hn = (np.full(shape.shape, self.altitude_ft) if H is None
+                  else np.broadcast_to(H, X.shape)[near])
+            inh = (hn >= base) & (hn <= top)
+            if not inh.any():
+                continue
+            frac = np.clip((hn - base) / max(top - base, 1.0), 0.0, 1.0)
+            fade = TOP_FADE * np.clip((frac - 0.5) / 0.5, 0.0, 1.0)  # weaker near the top
+            core = 0.0
+            if v.get("rain-flag") == 1:
+                core = 0.15 + 1.05 * _clamp01(v.get("rain"))
+                val = np.where(inh, np.maximum(strength(core) - fade, 0.0), 0.0)
+                rain_refl[near] = np.maximum(rain_refl[near], val)
+            if v.get("snow-flag") == 1:
+                score = 0.15 + 0.65 * _clamp01(v.get("snow"))
+                val = np.where(inh, np.maximum(strength(score) - fade, 0.0), 0.0)
+                snow_refl[near] = np.maximum(snow_refl[near], val)
+            if v.get("turbulence-flag") == 1:
+                t = _clamp01(v.get("turbulence"))
+                sw = (SW_PER_TURB * t * (0.35 + 0.65 * np.minimum(shape, 1.0))
+                      + SW_WALL * wall * np.clip((core - 0.75) / 0.45, 0.0, 1.0))
+                sw = sw * (0.7 + 0.6 * frac) * patch      # rougher higher up, patchy
+                # Never rougher than FlightGear's own value: only spread out.
+                sw = np.minimum(sw, SW_PER_TURB * t)
+                turb[near] = np.maximum(turb[near], np.where(inh & filled, sw / 10.0, 0.0))
+        return rain_refl, snow_refl, turb
+
+    def outflow(self, X, Y, h_agl_ft):
+        """Microburst winds (m/s: east, north, up) under heavy rain volumes.
+
+        Simple model: a downdraft in the centre that spreads out along the
+        ground, strongest just outside the rain's edge (1.2 x its radius).
+        """
+        east, north, up = (np.zeros_like(X, dtype=float) for _ in range(3))
+        hz = ((1 - math.exp(-h_agl_ft / 150.0)) * math.exp(-h_agl_ft / 1500.0)
+              / _OUTFLOW_MAX)
+        for item in self.volumes:
+            v = item["data"]
+            geometry = int(v.get("geometry") or 0)
+            if v.get("rain-flag") != 1 or geometry not in (1, 2):
+                continue
+            rain = _clamp01(v.get("rain"))
+            radius = item["r1"] if geometry == 1 else max(item["r1"], item["r2"])
+            if rain <= MB_RAIN or radius <= 0:
+                continue
+            t = _clamp01(v.get("turbulence")) if v.get("turbulence-flag") == 1 else 0.0
+            vmax = MB_VMAX * (rain - MB_RAIN) / (1.0 - MB_RAIN) * (0.6 + 0.4 * t)
+            dx, dy = X - item["x"], Y - item["y"]
+            r = np.maximum(np.hypot(dx, dy), 1e-6)
+            q = r / (1.2 * radius)
+            ur = vmax * q * np.exp((1.0 - q * q) / 2.0) * hz
+            east += ur * dx / r
+            north += ur * dy / r
+            up -= 0.5 * vmax * np.exp(-(r / radius) ** 2) * min(h_agl_ft / 1000.0, 1.0)
+        return east, north, up
 
     def precipitation_field(self, X, Y, H=None):
         """Return rain, snow, and turbulence arrays for the weather volumes.
@@ -328,6 +496,8 @@ class FlightGearWeather:
         H is the height (ft) of each point, for example where the radar beam
         is. Without it the aircraft's own altitude is used everywhere.
         """
+        if self.realistic:
+            return self._realistic_field(X, Y, H)
         rain_refl = np.zeros_like(X, dtype=float)
         snow_refl = np.zeros_like(X, dtype=float)
         turb = np.zeros_like(X, dtype=float)

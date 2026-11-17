@@ -1,69 +1,11 @@
 ==============================================================================
-TIME     : 2026-11-16 15:39:11
-WEATHER  : Detailed Weather ON, tile type 'low_pressure'
-AIRCRAFT : lat 28.560183, lon 77.122341, alt 3260 ft
-VOLUMES  : 2
+TIME     : 2026-11-17 14:53:49
+WEATHER  : Detailed Weather ON, tile type 'high_pressure'
+AIRCRAFT : lat 28.519959, lon 77.459806, alt 11815 ft
+VOLUMES  : 0
 ==============================================================================
-
---- volume 0 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         3   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5653   centre latitude
-  longitude-deg              77.0969   centre longitude
-  r1-m                         20000   size 1 in metres (radius / half-length)
-  r2-m                         20000   size 2 in metres (radius / half-width)
-  heading-deg                    280   rotation of the shape
-  base-altitude-ft           4813.19   bottom of the volume, ft above sea level
-  top-altitude-ft            5713.19   top of the volume, ft above sea level
-  visibility                    2000   visibility inside, metres
-  visibility-flag                  1   1 = value above is used, 0 = ignore it
-  rain                            -1   rain 0..1  (drives radar colour)  [flag 0: not used]
-  rain-flag                        0   1 = value above is used, 0 = ignore it
-  snow                            -1   snow 0..1  [flag 0: not used]
-  snow-flag                        0   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
-  lift-flag                        0   1 = value above is used, 0 = ignore it
-  saturation                      -1   humidity / cloud wetness 0..1  [flag 0: not used]
-  saturation-flag                  0   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : 40 x 40 km box, turned 280 deg
-    Height: 4813 ft to 5713 ft (900 ft thick)
-    Centre: 1.4 NM from aircraft; aircraft altitude is NOT inside this height band
-    Sets  : visibility 2000 m
-    Means : CLOUD layer (low visibility inside)
-    Radar : no echo (no rain in this volume)
-
---- volume 1 ------------------------------------------------------------
-  RAW VALUES                         MEANING
-  geometry                         3   shape: 1 circle, 2 ellipse, 3 rectangle
-  latitude-deg               28.5653   centre latitude
-  longitude-deg              77.0969   centre longitude
-  r1-m                         20000   size 1 in metres (radius / half-length)
-  r2-m                         20000   size 2 in metres (radius / half-width)
-  heading-deg                    280   rotation of the shape
-  base-altitude-ft                 0   bottom of the volume, ft above sea level
-  top-altitude-ft            4813.19   top of the volume, ft above sea level
-  visibility                      -1   visibility inside, metres  [flag 0: not used]
-  visibility-flag                  0   1 = value above is used, 0 = ignore it
-  rain                            -1   rain 0..1  (drives radar colour)  [flag 0: not used]
-  rain-flag                        0   1 = value above is used, 0 = ignore it
-  snow                             0   snow 0..1
-  snow-flag                        1   1 = value above is used, 0 = ignore it
-  turbulence                      -1   turbulence 0..1  (TURB mode)  [flag 0: not used]
-  turbulence-flag                  0   1 = value above is used, 0 = ignore it
-  lift                            -1   vertical air movement (thermal lift)  [flag 0: not used]
-  lift-flag                        0   1 = value above is used, 0 = ignore it
-  saturation                     0.9   humidity / cloud wetness 0..1
-  saturation-flag                  1   1 = value above is used, 0 = ignore it
-  EXPLANATION
-    Shape : 40 x 40 km box, turned 280 deg
-    Height: 0 ft to 4813 ft (4813 ft thick)
-    Centre: 1.4 NM from aircraft; aircraft altitude IS inside this height band
-    Sets  : snow 0.00 (none), humidity 0.90
-    Means : air below the cloud base (humidity zone)
-    Radar : no echo (no rain in this volume)
+No effect volumes. Detailed Weather is off, or not loaded yet,
+or wxradar_export.nas is not running. Radar shows no Detailed Weather.
 
 SUMMARY: no rain volumes -> radar stays empty
 

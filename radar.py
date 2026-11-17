@@ -105,9 +105,35 @@ PWS_WARN_NM, PWS_WARN_DEG = 3.0, 25.0   # warning area: close and nearly ahead
 PWS_SPAN_DEG = 40.0     # caution area: +/- this either side
 MICROBURST_DBZ = 45.0   # heavy rain ...
 MICROBURST_TURB = 0.6   # ... with violent air near the ground = microburst
+F_ALERT = 0.13          # Realistic: F-factor hazard limit (averaged over ~1 km)
+F_AVERAGE_NM = 0.5      # ... length of that average along the beam
 
 
-def windshear(weather, ax, ay, up_deg, agl_ft, ground_ft=0.0):
+def _f_factor_hazard(weather, X, Y, b, rs, agl_ft, ground_ft, speed_kt):
+    """Realistic PWS: Doppler-style F-factor along each beam.
+
+    F = (rate of tailwind change) / g - (vertical wind) / airspeed. The tailwind
+    change comes from how the wind along the beam changes with distance, met
+    at the aircraft's speed. A microburst gives headwind then tailwind plus a
+    downdraft: F above F_ALERT over about 1 km is a hazard. Needs some rain
+    echo there, like a real radar (it measures the drops).
+    """
+    h = max(300.0, min(agl_ft, 1500.0))
+    east, north, up = weather.outflow(X, Y, h)
+    tail = east * np.sin(b) + north * np.cos(b)        # wind along the beam, m/s
+    v = max(speed_kt, 60.0) * 0.5144
+    dr_m = (rs[1] - rs[0]) * 1852.0
+    f = np.gradient(tail, dr_m, axis=1) * v / 9.81 - up / v
+    n = max(1, int(round(F_AVERAGE_NM / (rs[1] - rs[0]))))
+    kernel = np.ones(n) / n
+    f = np.apply_along_axis(lambda row: np.convolve(row, kernel, mode="same"), 1, f)
+    rain, _snow, _t = weather.precipitation_field(X, Y, np.full(X.shape, ground_ft + h))
+    wet = np.apply_along_axis(lambda row: np.convolve(row, np.ones(n), mode="same"), 1,
+                              (rain > 0.01).astype(float)) > 0
+    return (f >= F_ALERT) & wet
+
+
+def windshear(weather, ax, ay, up_deg, agl_ft, ground_ft=0.0, speed_kt=140.0):
     """Look for microbursts low down, close ahead, like a real PWS.
 
     A real PWS measures the wind with Doppler: air rushing towards the plane
@@ -125,12 +151,16 @@ def windshear(weather, ax, ay, up_deg, agl_ft, ground_ft=0.0):
     X = ax + rs[None, :] * np.sin(b)
     Y = ay + rs[None, :] * np.cos(b)
     field = getattr(weather, "precipitation_field", None)
-    if field is not None:
-        rain, _snow, turb = field(X, Y, np.full(X.shape, ground_ft + 500.0))
+    if getattr(weather, "realistic", False) and hasattr(weather, "outflow"):
+        hazard = _f_factor_hazard(weather, X, Y, b, rs, agl_ft, ground_ft, speed_kt)
     else:
-        refl, turb = weather.field(X, Y)
-        rain = refl * getattr(weather, "precip_mult", (1.0, 0.0))[0]
-    hazard = (rain > 0.01) & (to_dbz(rain) >= MICROBURST_DBZ) & (turb >= MICROBURST_TURB)
+        # Simple rule: heavy rain with violent air low down = microburst.
+        if field is not None:
+            rain, _snow, turb = field(X, Y, np.full(X.shape, ground_ft + 500.0))
+        else:
+            refl, turb = weather.field(X, Y)
+            rain = refl * getattr(weather, "precip_mult", (1.0, 0.0))[0]
+        hazard = (rain > 0.01) & (to_dbz(rain) >= MICROBURST_DBZ) & (turb >= MICROBURST_TURB)
     if not hazard.any():
         return None
     A = np.broadcast_to(angs[:, None], X.shape)
@@ -306,6 +336,9 @@ class RadarScanner:
         rain_dbz = z_to_dbz(z_rg) + speckle
         snow_dbz = z_to_dbz(z_snow) + speckle
         turb = _smooth(turb)
+        if getattr(weather, "realistic", False):
+            # Doppler turbulence changes from scan to scan as the air churns.
+            turb = turb * np.exp(_smooth(self.rng.normal(0.0, 0.25, shape)))
 
         levels = np.zeros(shape, dtype=np.uint8)
         if mode == "MAP":

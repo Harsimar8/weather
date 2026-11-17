@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QComboBox,
                                QDial, QFileDialog, QFormLayout, QGridLayout, QGroupBox,
                                QHBoxLayout, QLabel, QLineEdit, QMainWindow,
-                               QPushButton, QScrollArea, QSlider, QSpinBox,
+                               QPushButton, QRadioButton, QScrollArea, QSlider, QSpinBox,
                                QVBoxLayout, QWidget)
 
 from display import RadarDisplay
@@ -103,6 +103,27 @@ class MainWindow(QMainWindow):
         f.addRow("Telnet port", self.port)
         f.addRow(self.connect_btn)
         f.addRow(self.status)
+        # How FlightGear's rain volumes are drawn: as FlightGear gives them
+        # (flat), or with a real storm's shape, Doppler-like turbulence and
+        # F-factor windshear filled in by the app.
+        self.shape_real = QRadioButton("Real data")
+        self.shape_realistic = QRadioButton("Realistic")
+        self.shape_real.setToolTip("FlightGear's volumes exactly as given: one flat "
+                                   "colour per volume, turbulence from its value.")
+        self.shape_realistic.setToolTip(
+            "Same volumes (place, size, heights, drift from FlightGear), drawn like a "
+            "real storm: strong core, weaker ragged edges, weaker near the top.\n"
+            "Turbulence: Doppler-like patches (5 m/s and up), strongest on core walls.\n"
+            "Windshear: F-factor from a microburst model under heavy rain.")
+        self.shape_real.setChecked(True)
+        shape_group = QButtonGroup(src)
+        shape_row = QHBoxLayout()
+        for b in (self.shape_real, self.shape_realistic):
+            shape_group.addButton(b)
+            shape_row.addWidget(b)
+        shape_row.addStretch()
+        shape_group.buttonClicked.connect(self._shape_changed)
+        f.addRow("Echo shape", shape_row)
         panel.addWidget(src)
 
         wx = QGroupBox("Weather")
@@ -448,8 +469,12 @@ class MainWindow(QMainWindow):
         """Predictive windshear: look a few times a second, alert like a Boeing."""
         if now >= self.pws_next:
             self.pws_next = now + 0.25
+            fg_live = self.fg and self.fg.connected
+            speed = ((self.fg.state.get("gs_kt") if fg_live else None)
+                     or self.sim_gs)
             self.pws = windshear(self._scan_weather(), self.ax, self.ay,
-                                 self.track, agl_ft, self._altitudes()[1])
+                                 self.track, agl_ft, self._altitudes()[1],
+                                 speed_kt=speed)
         level = self.pws["level"] if self.pws else None
         if level not in ("warning", "caution"):
             self.pws_said = (None, 0.0)
@@ -468,6 +493,12 @@ class MainWindow(QMainWindow):
 
     def _precip_changed(self, kind):
         self.weather.precip = kind
+        self.full_refresh()
+
+    def _shape_changed(self, *_):
+        """Echo shape switched: redraw FlightGear's volumes the new way."""
+        self.fg_weather.realistic = self.shape_realistic.isChecked()
+        self.pws_next = 0.0             # look for windshear again at once
         self.full_refresh()
 
     def full_refresh(self, *_):
@@ -827,7 +858,8 @@ class MainWindow(QMainWindow):
         if s.get("gen", 0) != self.fg.cache_gen:
             return ("WX RESET", True)
         if self.fg_weather.volumes:
-            return (f"FG VOLUMES {len(self.fg_weather.volumes)}", False)
+            shaped = " SHAPED" if self.fg_weather.realistic else ""
+            return (f"FG VOLUMES {len(self.fg_weather.volumes)}{shaped}", False)
         if self.manual_wx:
             return ("FG LAYERS", False)
         if s.get("lw_code") and s.get("clouds"):
@@ -992,7 +1024,10 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    win = MainWindow()
-    win.show()
-    sys.exit(app.exec())
+    try:
+        app = QApplication(sys.argv)
+        win = MainWindow()
+        win.show()
+        sys.exit(app.exec())
+    except KeyboardInterrupt:
+        print("\nWeather Radar application stopped.")
