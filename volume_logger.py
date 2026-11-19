@@ -166,8 +166,20 @@ def explain(v, ac):
     lines.append(f"Means : {kind}")
 
     rain = v["rain"] if on("rain") else 0.0
+    turb = v["turbulence"] if on("turbulence") else 0.0
+    # Same rule as radar.py: WX+T paints turbulence magenta only inside a
+    # rain echo and above TURB_SHOW (0.5). Doppler radar needs raindrops to
+    # measure the air, so clear-air turbulence stays invisible.
+    if turb <= 0:
+        tnote = ""
+    elif rain <= 0:
+        tnote = "; turbulence NOT shown (no rain to reflect, clear air)"
+    elif turb > 0.5:
+        tnote = "; turbulence shown MAGENTA in WX+T (within 40 NM)"
+    else:
+        tnote = f"; turbulence {turb:.2f} too weak for WX+T (needs > 0.5)"
     lines.append(f"Radar : {radar_colour(rain) if rain > 0 else 'no echo (no rain in this volume)'}"
-                 + ("; shows in TURB mode" if on("turbulence") and v["turbulence"] > 0 else ""))
+                 + tnote)
     return lines
 
 
@@ -180,11 +192,13 @@ def report(vols, ac, weather):
            f"VOLUMES  : {len(vols)}",
            "=" * 78]
     if not vols:
-        out.append("No effect volumes. Detailed Weather is off, or not loaded yet,")
-        out.append("or wxradar_export.nas is not running. Radar shows no Detailed Weather.")
+        out.append("No effect volumes. Either this weather has no rain, snow, turbulence")
+        out.append("or lift (e.g. Fair weather, High pressure: clouds only), or the clouds")
+        out.append("are still being built, or Detailed Weather / wxradar_export.nas is off.")
     rainy = 0
     for i, v in enumerate(vols):
         out.append(f"\n--- volume {i} " + "-" * 60)
+        out.append(f"  SOURCE : {source(v)}")
         out.append("  RAW VALUES" + " " * 25 + "MEANING")
         for k in FIELDS:
             x = v.get(k)
@@ -200,7 +214,14 @@ def report(vols, ac, weather):
             rainy += 1
     out.append("\nSUMMARY: " + (f"{rainy} rain volume(s) -> radar shows echoes"
                                 if rainy else "no rain volumes -> radar stays empty"))
+    placed = sum(1 for v in vols if source(v).startswith("placed"))
+    out.append(f"SOURCES: {placed} placed from map, {len(vols) - placed} from Detailed Weather")
     return "\n".join(out) + "\n\n"
+
+
+def source(v):
+    """Where the volume came from (exported by wxradar_export.nas)."""
+    return v.get("source") or "unknown (load the new wxradar_export.nas)"
 
 
 def main():
@@ -217,6 +238,11 @@ def main():
             code = value("/local-weather/tiles/code")
             weather = (f"Detailed Weather ON, tile type '{code}'" if detailed
                        else "Basic Weather (Detailed Weather OFF)")
+            # In METAR mode the tile code is just 'METAR': add which scenario
+            # and which METAR text the weather was built from.
+            if not detailed or code == "METAR":
+                weather += (f"\nSCENARIO : {value('/environment/weather-scenario')}"
+                            f"\nMETAR    : {value('/environment/metar/data')}")
             sig = (signature(vols), weather)
             if sig != last:
                 text = report(vols, ac, weather)

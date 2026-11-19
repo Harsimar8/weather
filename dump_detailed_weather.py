@@ -109,6 +109,43 @@ def run_nasal_dump():
             "Debug > Nasal Console in FlightGear, press Execute, then run this again.")
 
 
+def prop(path):
+    """Value of one property, or None if it is not there."""
+    try:
+        return get_node(path).get("value")
+    except Exception:
+        return None
+
+
+def weather_summary():
+    """Which weather scenario is chosen and which METAR it stands for.
+
+    A scenario such as "Fair weather" is just a fixed METAR from
+    Environment/environment.xml with the station "XXXX" (no real airport);
+    the walk below shows only the first 2 scenarios, so it is looked up here.
+    """
+    chosen = prop("/environment/weather-scenario")
+    out = ["=== SUMMARY ===", f"  weather-scenario = {chosen}"]
+    try:
+        kids = get_node("/environment/weather-scenarios").get("children", [])
+    except Exception:
+        kids = []
+    for c in kids:
+        p = child_path("/environment/weather-scenarios", c)
+        if prop(p + "/name") == chosen:
+            out.append(f"  scenario METAR   = {prop(p + '/metar') or '(none: live or manual input)'}")
+            desc = " ".join(str(prop(p + "/description") or "").split())
+            out.append(f"  description      = {desc}")
+            break
+    out.append(f"  metar[0]/data    = {prop('/environment/metar[0]/data')}")
+    out.append(f"  station-id       = {prop('/environment/metar[0]/station-id')}"
+               "   (nearest airport; 'XXXX' in the METAR means a made-up report)")
+    out.append(f"  tile-management  = {prop('/local-weather/tmp/tile-management')}"
+               f"   tile-type = {prop('/local-weather/tmp/tile-type')}")
+    out.append("")
+    return out
+
+
 def main():
     lines = [f"Detailed Weather dump  {datetime.now():%Y-%m-%d %H:%M:%S}", ""]
     try:
@@ -120,6 +157,7 @@ def main():
         print("Warning: Detailed Weather is not running. Turn it on and press Apply first.")
         lines.append("WARNING: Detailed Weather was NOT running during this dump.\n")
 
+    lines += weather_summary()
     lines.append("#" * 70)
     lines.append("# PART 1: PROPERTIES (what telnet / HTTP can read directly)")
     lines.append("#" * 70)

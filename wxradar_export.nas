@@ -46,6 +46,10 @@ var export_volumes = func {
         n.getNode("lift-flag", 1).setValue(ev.lift_flag);
         n.getNode("saturation-flag", 1).setValue(ev.sat_flag);
         n.getNode("saturation", 1).setValue(ev.sat);
+        # Where the volume came from: a click on the app's map, or Detailed Weather.
+        n.getNode("source", 1).setValue(contains(ev, "wxradar_placed")
+                                        ? "placed from map (" ~ ev.wxradar_placed ~ ")"
+                                        : "Detailed Weather");
         n.getNode("valid", 1).setValue(1);
     }
     # Remove volumes left over from an earlier, bigger export.
@@ -171,6 +175,21 @@ var place_weather = func {
     var lw = local_weather;
     var q_new = size(lw.cloudAssemblyArray);
     var q_old = size(lw.clouds_path);
+    # FlightGear's radar echoes (/instrumentation/wxradar/storm[]) that exist
+    # now, so the echo the create_* call adds can be replaced by ours.
+    var wxr = props.globals.getNode("/instrumentation/wxradar", 1);
+    var old_echo = {};
+    foreach (var s; wxr.getChildren("storm"))
+        old_echo[s.getIndex()] = 1;
+
+    # Top of the weather. A shower's own volume ends 1000 ft above the cloud
+    # base, so the radar beam passes over it: make it as tall as a real shower.
+    var top = 20000;
+    if (kind == "shower")
+        top = base + 10000;
+    elsif (kind == "thunderstorm" and radius > 5000)
+        top = 24000;
+
     if (kind == "shower")
         local_weather.create_cumulonimbus_cloud_rain(lat, lon, base, 1.0, rain);
     elsif (kind == "cb")
@@ -184,17 +203,40 @@ var place_weather = func {
     var changed = 0;
     for (var i = before; i < size(vols); i += 1) {
         var ev = vols[i];
+        # Mark every volume this click made, so the export can tell them
+        # from Detailed Weather's own volumes (see "source" in export_volumes).
+        ev.wxradar_placed = kind;
         if (ev.rain_flag != 1) continue;
         ev.r1 = radius;
         ev.r2 = radius;
         ev.rain = rain;
         if (turb > 0) { ev.turb = turb; ev.turb_flag = 1; }
         else          { ev.turb = -1;   ev.turb_flag = 0; }
+        if (kind == "shower") ev.alt_high = top;
         changed += 1;
     }
+
+    # FlightGear radar echo with the asked size, rain and turbulence (showers
+    # get none from Detailed Weather; storms get one with its default size).
+    foreach (var s; wxr.getChildren("storm"))
+        if (!contains(old_echo, s.getIndex()))
+            s.remove();
+    var i = 0;
+    while (wxr.getChild("storm", i, 0) != nil) i += 1;
+    var e = wxr.getChild("storm", i, 1);
+    e.getNode("latitude-deg", 1).setValue(lat);
+    e.getNode("longitude-deg", 1).setValue(lon);
+    e.getNode("heading-deg", 1).setValue(0.0);
+    e.getNode("base-altitude-ft", 1).setValue(base);
+    e.getNode("top-altitude-ft", 1).setValue(top);
+    e.getNode("radius-nm", 1).setValue(radius / 1852.0);
+    e.getNode("reflectivity-norm", 1).setValue(rain);
+    e.getNode("turbulence-norm", 1).setValue(turb);
+    e.getNode("type", 1).setValue("single_cell");
+    e.getNode("show", 1).setValue(1);
     var shown = draw_queued_clouds(q_new, q_old);
-    p.getNode("result", 1).setValue(sprintf("OK: %s at %.4f %.4f, base %d ft, %d volume(s), %d cloud(s)",
-                                            kind, lat, lon, base, changed, shown));
+    p.getNode("result", 1).setValue(sprintf("OK: %s at %.4f %.4f, base %d ft, top %d ft, %d volume(s), %d cloud(s), FG echo %d",
+                                            kind, lat, lon, base, top, changed, shown, i));
 };
 
 # Take the clouds that place_weather just queued out of Detailed Weather's

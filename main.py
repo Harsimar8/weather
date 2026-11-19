@@ -8,12 +8,17 @@ import time
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QComboBox,
-                               QDial, QFileDialog, QFormLayout, QGridLayout, QGroupBox,
+                               QDial, QDoubleSpinBox, QFileDialog, QFormLayout,
+                               QGridLayout, QGroupBox,
                                QHBoxLayout, QLabel, QLineEdit, QMainWindow,
-                               QPushButton, QRadioButton, QScrollArea, QSlider, QSpinBox,
+                               QPushButton, QRadioButton, QScrollArea, QSlider, QSpinBox, QSplitter,
+                               QToolButton,
                                QVBoxLayout, QWidget)
 
 from display import RadarDisplay
+from place_map import PlaceMap
+from udp_link import DEFAULT_PORT as UDP_PORT, UDPLink
+from fake_plane import DEFAULT_LAT, DEFAULT_LON, FakePlane
 from fg_link import PLACE_RESULT, FGLink
 from radar import MODES, TILT_LIMIT_DEG, RadarScanner, auto_tilt, windshear
 from weather import (PRECIP_KINDS, SCENARIOS, Cell, WeatherModel, FlightGearWeather,
@@ -23,7 +28,8 @@ from terrain import TerrainMap
 SIM_SPEED_KT = 250.0
 RESET_JUMP_NM = 5.0       # aircraft moved this far in one read: FlightGear was reset
 GND_CLUTTER_SHARE = 0.01  # warn when ground echo paints over 1 % of the screen
-# Weather you can place by clicking on the radar:
+UDP_MODE = "Other simulator (UDP)"   # aircraft position from udp_link.py
+# Weather you can place by clicking on the placement map:
 # name: (kind for wxradar_export.nas, radius km, rain %, turbulence %, base ft AGL)
 PLACE_KINDS = {
     "Rain shower": ("shower", 2, 40, 0, 3000),
@@ -45,6 +51,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Weather Radar")
         self.weather = WeatherModel()
         self.fg_weather = FlightGearWeather()
+        self.no_weather = FlightGearWeather()  # always empty: fallback switched off
         self.layer_weather = LayerWeather()   # Basic Weather, Manual Configuration
         self.terrain = TerrainMap()
         self.freezing_ft = None               # freezing level, ft MSL
@@ -52,6 +59,14 @@ class MainWindow(QMainWindow):
         self.scanner = RadarScanner()
         self.display = RadarDisplay(self.scanner)
         self.fg = None
+        self.udp = None             # other simulator (UDP), see udp_link.py
+        self.placed = []            # storms placed on the map (see _place)
+        self.map_next = 0.0         # next map redraw (s)
+        self.fake = None            # built-in fake plane (sends UDP to this app)
+        self.fake_next = 0.0        # next fake plane packet (s)
+        self.fdm_checked = False    # FlightGear's flight model checked (must be null to drive it)
+        self.udp_error = ""         # why listening on the UDP port failed
+        self.udp_retry = 0.0        # when to try listening again
         self.origin = None          # lat/lon that maps to (0, 0) NM
         self.ax = self.ay = 0.0     # aircraft position (NM)
         self.heading = 0.0          # where the nose points (true)
@@ -73,6 +88,8 @@ class MainWindow(QMainWindow):
         self.synced_clouds = None   # Detailed Weather clouds already on the radar
         self.last_strike = None     # last lightning strike already applied
         self.notice = ("", 0.0)     # short message kept under the live status
+        self.lw_warning = ""        # Detailed Weather built nothing: why (status top)
+        self.lw_empty_since = None  # when Detailed Weather was first seen with nothing built
         self.last_fg_pos = None     # lat/lon at the last FlightGear read (reset check)
         self.was_reinit = False     # FlightGear reset flag at the last read
 
@@ -90,7 +107,13 @@ class MainWindow(QMainWindow):
         src = QGroupBox("Source")
         f = QFormLayout(src)
         self.source = QComboBox()
-        self.source.addItems(["Simulated", "FlightGear"])
+        self.source.addItems(["Simulated", "FlightGear", UDP_MODE])
+        self.source.currentTextChanged.connect(self._source_changed)
+        self.udp_port = QSpinBox()
+        self.udp_port.setRange(1, 65535)
+        self.udp_port.setValue(UDP_PORT)
+        self.udp_port.setToolTip("Port the other simulator (or fake_plane.py) sends to.")
+        self.udp_port.editingFinished.connect(lambda: self._source_changed(self.source.currentText()))
         self.host = QLineEdit("localhost")
         self.port = QSpinBox()
         self.port.setRange(1, 65535)
@@ -101,6 +124,7 @@ class MainWindow(QMainWindow):
         f.addRow("Mode", self.source)
         f.addRow("Host", self.host)
         f.addRow("Telnet port", self.port)
+        f.addRow("UDP port (other sim)", self.udp_port)
         f.addRow(self.connect_btn)
         f.addRow(self.status)
         # How FlightGear's rain volumes are drawn: as FlightGear gives them
@@ -125,6 +149,7 @@ class MainWindow(QMainWindow):
         shape_group.buttonClicked.connect(self._shape_changed)
         f.addRow("Echo shape", shape_row)
         panel.addWidget(src)
+        panel.addWidget(self._build_fake_panel())
 
         wx = QGroupBox("Weather")
         f = QFormLayout(wx)
@@ -173,7 +198,6 @@ class MainWindow(QMainWindow):
         self.coverage.sliderReleased.connect(self.regenerate)
         panel.addWidget(wx)
 
-        panel.addWidget(self._build_place_panel())
         panel.addWidget(self._build_wxr_panel())
 
         sim = QGroupBox("Simulated aircraft")
@@ -207,19 +231,206 @@ class MainWindow(QMainWindow):
         scroll.setWidget(left)
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setFixedWidth(320)
+        scroll.setMinimumWidth(240)
         root = QWidget()
-        lay = QHBoxLayout(root)
-        lay.addWidget(scroll)
-        lay.addWidget(self.display, 1)
+        lay = QVBoxLayout(root)
+        # Opens / closes the weather placement map.
+        self.map_btn = QPushButton("Show weather map")
+        self.map_btn.setCheckable(True)
+        self.map_btn.setToolTip("Open or close the map for placing weather (Ctrl+M).")
+        self.map_btn.setShortcut("Ctrl+M")
+        self.map_btn.toggled.connect(self._toggle_map)
+        top = QHBoxLayout()
+        top.addWidget(self.map_btn)
+        top.addStretch()
+        lay.addLayout(top)
+        # Controls | radar | map, side by side; the bars between them are draggable.
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setHandleWidth(6)
+        self.splitter.addWidget(scroll)
+        self.splitter.addWidget(self.display)
+        lay.addWidget(self.splitter, 1)
+        # Weather placement map: beside the radar while open.
+        self.place_map = PlaceMap()
+        self.place_map.placed.connect(self._place)
+        self.place_map.removed.connect(self._unplace)
+        right = QVBoxLayout()
+        right.setContentsMargins(0, 0, 0, 0)
+        right.addWidget(self.place_map, 1)
+        right.addWidget(self._build_place_panel())
+        self.map_panel = QWidget()
+        self.map_panel.setLayout(right)
+        self.map_panel.setMinimumWidth(300)
+        self.splitter.addWidget(self.map_panel)
+        self.splitter.setStretchFactor(0, 0)
+        self.splitter.setStretchFactor(1, 1)
+        self.splitter.setStretchFactor(2, 0)
+        self.map_panel.hide()                       # closed until the button opens it
         self.setCentralWidget(root)
-        self.resize(1100, 680)
+        self.resize(1150, 760)
+        self.splitter.setSizes([320, 830, 400])
+
+    def _toggle_map(self, on):
+        """Open or close the weather placement map beside the radar."""
+        self.map_btn.setText("Hide weather map" if on else "Show weather map")
+        if on:
+            sizes = self.splitter.sizes()
+            if sizes[2] < 300:          # first time open: make room for it
+                self.resize(self.width() + 400, self.height())
+                self.splitter.setSizes([sizes[0], sizes[1], 400])
+            self.map_panel.show()
+            self._update_map(force=True)
+        else:
+            self.map_panel.hide()
+            self.resize(max(900, self.width() - self.map_panel.width()), self.height())
+
+    def _build_fake_panel(self):
+        """Built-in fake plane: stands in for the other simulator while testing.
+        It sends real UDP packets to this app, like fake_plane.py does."""
+        # Small arrow button that opens / closes the box (closed at start).
+        outer = QWidget()
+        v = QVBoxLayout(outer)
+        v.setContentsMargins(0, 0, 0, 0)
+        arrow = QToolButton()
+        arrow.setText("✈  Fake plane (test)")
+        arrow.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        arrow.setArrowType(Qt.RightArrow)
+        arrow.setCheckable(True)
+        arrow.setAutoRaise(True)
+        arrow.setToolTip("Show / hide the fake plane controls")
+        box = QGroupBox()
+        box.setVisible(False)
+
+        def fold(open_):
+            arrow.setArrowType(Qt.DownArrow if open_ else Qt.RightArrow)
+            box.setVisible(open_)
+        arrow.toggled.connect(fold)
+        v.addWidget(arrow)
+        v.addWidget(box)
+        f = QFormLayout(box)
+        self.fake_btn = QPushButton("Start fake plane")
+        self.fake_btn.setCheckable(True)
+        self.fake_btn.setToolTip("Sends the plane's position to this app over UDP.\n"
+                                 "Mode switches to 'Other simulator (UDP)'.")
+        self.fake_btn.toggled.connect(self._fake_toggled)
+        self.fake_gs = QSpinBox()
+        self.fake_gs.setRange(0, 600)
+        self.fake_gs.setSingleStep(10)
+        self.fake_gs.setSuffix(" kt")
+        self.fake_gs.setToolTip("Ground speed. 0 = parked.")
+        self.fake_turn = QDoubleSpinBox()
+        self.fake_turn.setRange(-6.0, 6.0)
+        self.fake_turn.setSingleStep(0.5)
+        self.fake_turn.setDecimals(1)
+        self.fake_turn.setSuffix(" °/s")
+        self.fake_turn.setToolTip("Turn rate: + turns right, - turns left, 0 = straight.\n"
+                                  "3 °/s is a normal airliner turn (2 minutes per circle).")
+        self.fake_hdg = QSpinBox()
+        self.fake_hdg.setRange(0, 359)
+        self.fake_hdg.setWrapping(True)
+        self.fake_hdg.setSingleStep(10)
+        self.fake_hdg.setValue(90)
+        self.fake_hdg.setSuffix("°")
+        self.fake_hdg.setToolTip("Heading (true): 0 north, 90 east, 180 south, 270 west.")
+        self.fake_alt = QSpinBox()
+        self.fake_alt.setRange(0, 45000)
+        self.fake_alt.setSingleStep(500)
+        self.fake_alt.setValue(5000)
+        self.fake_alt.setSuffix(" ft")
+        self.fake_lat = QLineEdit(f"{DEFAULT_LAT}")
+        self.fake_lon = QLineEdit(f"{DEFAULT_LON}")
+        jump = QPushButton("Move plane to this position")
+        jump.clicked.connect(self._fake_jump)
+        for w in (self.fake_gs, self.fake_turn, self.fake_hdg, self.fake_alt):
+            w.valueChanged.connect(self._fake_changed)
+        self.fake_info = QLabel("Stopped")
+        pos_row = QHBoxLayout()
+        pos_row.addWidget(self.fake_lat)
+        pos_row.addWidget(self.fake_lon)
+        f.addRow(self.fake_btn)
+        f.addRow("Speed", self.fake_gs)
+        f.addRow("Turn", self.fake_turn)
+        f.addRow("Heading", self.fake_hdg)
+        f.addRow("Altitude", self.fake_alt)
+        f.addRow("Lat / Lon", pos_row)
+        f.addRow(jump)
+        f.addRow(self.fake_info)
+        return outer
+
+    def _fake_position(self):
+        try:
+            return float(self.fake_lat.text()), float(self.fake_lon.text())
+        except ValueError:
+            self.fake_info.setText("Lat / Lon must be numbers, e.g. 28.5665  77.1031")
+            return None
+
+    def _fake_toggled(self, on):
+        self.fake_btn.setText("Stop fake plane" if on else "Start fake plane")
+        if not on:
+            if self.fake:
+                self.fake.close()
+                self.fake = None
+            self.fake_info.setText("Stopped (the plane stays where it was)")
+            return
+        pos = self._fake_position()
+        if pos is None:
+            self.fake_btn.setChecked(False)
+            return
+        if self.source.currentText() != UDP_MODE:
+            self.source.setCurrentText(UDP_MODE)     # starts listening for it
+        self.fake = FakePlane(pos[0], pos[1], self.fake_hdg.value(), self.fake_alt.value(),
+                              self.fake_gs.value(), self.fake_turn.value(),
+                              port=self.udp_port.value())
+        self.fake_last = self.fake_next = time.perf_counter()
+
+    def _fake_changed(self, *_):
+        """Speed, turn, heading and altitude change at once, also while flying."""
+        if self.fake:
+            self.fake.gs = float(self.fake_gs.value())
+            self.fake.turn = float(self.fake_turn.value())
+            self.fake.hdg = float(self.fake_hdg.value())
+            self.fake.alt = float(self.fake_alt.value())
+
+    def _fake_jump(self):
+        pos = self._fake_position()
+        if pos and self.fake:
+            self.fake.lat, self.fake.lon = pos
+        elif pos:
+            self.fake_info.setText("Press Start: the plane starts at this position.")
+
+    def _fly_fake(self, now):
+        """Move the fake plane and send its position (10 times a second)."""
+        if not self.fake:
+            return
+        self.fake.step(now - self.fake_last)
+        self.fake_last = now
+        if now < self.fake_next:
+            return
+        self.fake_next = now + 0.1
+        self.fake.port = self.udp_port.value()
+        try:
+            self.fake.send()
+        except OSError as exc:
+            self.fake_info.setText(f"Send failed: {exc}")
+            return
+        if self.fake.turn:                          # show the heading as it turns
+            self.fake_hdg.blockSignals(True)
+            self.fake_hdg.setValue(round(self.fake.hdg) % 360)
+            self.fake_hdg.blockSignals(False)
+        self.fake_info.setText(f"Flying: {self.fake.lat:.4f} {self.fake.lon:.4f}  "
+                               f"HDG {self.fake.hdg:03.0f}  {self.fake.gs:.0f} kt")
 
     def _build_place_panel(self):
-        """Place a rain shower, Cb or thunderstorm where you click on the radar."""
-        box = QGroupBox("Place weather (click on radar)")
+        """Settings for the weather placed by clicking on the map beside the radar."""
+        box = QGroupBox("Place weather: left click the map, right click removes")
         f = QFormLayout(box)
-        self.place_on = QCheckBox("Clicking the radar places weather")
+        self.hold_still = QCheckBox("Hold aircraft still (no flying)")
+        self.hold_still.setToolTip(
+            "Simulated: the aircraft stops moving.\n"
+            "FlightGear: pauses FlightGear. Placing weather still works while paused.\n"
+            "Other simulator (UDP): the position always comes from that simulator.")
+        self.hold_still.toggled.connect(self._hold_changed)
         self.place_kind = QComboBox()
         self.place_kind.addItems(PLACE_KINDS)
         self.place_radius = QSpinBox()
@@ -235,25 +446,39 @@ class MainWindow(QMainWindow):
         self.place_rain.valueChanged.connect(self._place_labels)
         self.place_turb.valueChanged.connect(self._place_labels)
         self.place_kind.currentTextChanged.connect(self._place_defaults)
-        self.place_status = QLabel("FlightGear: needs Detailed Weather and the new "
-                                   "wxradar_export.nas. Not connected: the storm is "
-                                   "added to the app's own weather.")
+        clear_btn = QPushButton("Clear placed weather")
+        clear_btn.clicked.connect(self._clear_placed)
+        self.place_status = QLabel(
+            "Click the map to place weather around the aircraft, 360°. Every click "
+            "adds one more storm. In FlightGear mode real clouds + volumes are built "
+            "there (needs Detailed Weather and wxradar_export.nas).")
         self.place_status.setWordWrap(True)
         rain_row, turb_row = QHBoxLayout(), QHBoxLayout()
         rain_row.addWidget(self.place_rain)
         rain_row.addWidget(self.place_rain_lbl)
         turb_row.addWidget(self.place_turb)
         turb_row.addWidget(self.place_turb_lbl)
-        f.addRow(self.place_on)
+        f.addRow(self.hold_still)
         f.addRow("Type", self.place_kind)
         f.addRow("Size", self.place_radius)
         f.addRow("Rain", rain_row)
         f.addRow("Turbulence", turb_row)
         f.addRow("Cloud base", self.place_base)
+        f.addRow(clear_btn)
         f.addRow(self.place_status)
         self._place_defaults(self.place_kind.currentText())
-        self.display.clicked.connect(self.place_at)
         return box
+
+    def _hold_changed(self, on):
+        """Hold the aircraft where it is, so weather can be placed around it."""
+        if self.fg and self.fg.connected:
+            try:
+                self.fg.set("/sim/freeze/master", "true" if on else "false")
+            except OSError as exc:
+                self.place_status.setText(f"Could not pause FlightGear: {exc}")
+                return
+            self.place_status.setText("FlightGear paused: click the map to place weather."
+                                      if on else "FlightGear running again.")
 
     def _place_defaults(self, name):
         _kind, radius, rain, turb, base = PLACE_KINDS[name]
@@ -273,20 +498,38 @@ class MainWindow(QMainWindow):
         turb = self.place_turb.value() / 100
         self.place_turb_lbl.setText("none" if turb == 0 else f"{turb:.2f}")
 
-    def place_at(self, rel_deg, dist_nm):
-        """Radar click: build the chosen weather there."""
-        if not self.place_on.isChecked():
-            return
+    def _fg_driven(self):
+        """Other simulator mode with FlightGear connected: FlightGear's aircraft
+        follows the other plane and FlightGear supplies the weather."""
+        return (self.source.currentText() == UDP_MODE
+                and self.fg is not None and self.fg.connected)
+
+    def _fg_wx_mode(self):
+        """The radar shows FlightGear's weather."""
+        return self.source.currentText() == "FlightGear" or self._fg_driven()
+
+    def _fg_placing(self):
+        """Placed weather goes to FlightGear (real clouds + volumes)."""
+        return (self._fg_wx_mode() and self.fg is not None and self.fg.connected
+                and bool(self.fg.state))
+
+    def _place(self, bearing, dist_nm):
+        """Map click: build the chosen weather at that true bearing and distance."""
         name = self.place_kind.currentText()
         kind = PLACE_KINDS[name][0]
         radius_km = self.place_radius.value()
+        r_nm = radius_km / 1.852
         rain = self.place_rain.value() / 100
         turb = self.place_turb.value() / 100
-        bearing = (self.track + rel_deg) % 360.0      # the screen is track up
         b = math.radians(bearing)
+        x = self.ax + dist_nm * math.sin(b)
+        y = self.ay + dist_nm * math.cos(b)
         where = f"{dist_nm:.1f} NM, bearing {bearing:03.0f}° true"
-        s = self.fg.state if (self.fg and self.fg.connected) else None
-        if s:
+        label = f"#{len(self.placed) + 1}"
+        if self._fg_placing():
+            # Around the other plane when it drives FlightGear (exact position).
+            s = (self.udp.state if self._fg_driven() and self.udp and self.udp.live()
+                 else self.fg.state)
             lat0 = s["lat"]
             lat = lat0 + dist_nm * math.cos(b) / 60.0
             lon = s["lon"] + dist_nm * math.sin(b) / (60.0 * math.cos(math.radians(lat0)))
@@ -296,17 +539,59 @@ class MainWindow(QMainWindow):
             except OSError as exc:
                 self.place_status.setText(f"Send failed: {exc}")
                 return
+            self.placed.append({"x": x, "y": y, "r": r_nm, "rain": rain,
+                                "cell": None, "label": label})
             self.place_status.setText(f"{name} sent to FlightGear, {where}. Waiting...")
             QTimer.singleShot(2500, self._check_place)
         else:
-            # No FlightGear: add it to the app's own storms instead.
-            x = self.ax + dist_nm * math.sin(b)
-            y = self.ay + dist_nm * math.cos(b)
-            r_nm = radius_km / 1.852
-            self.weather.cells.append(Cell(x, y, r_nm, r_nm, 0.0, 0.2 + 1.1 * rain, turb))
+            cell = Cell(x, y, r_nm, r_nm, 0.0, 0.2 + 1.1 * rain, turb)
+            self.weather.cells.append(cell)
+            self.placed.append({"x": x, "y": y, "r": r_nm, "rain": rain,
+                                "cell": cell, "label": label})
             self.full_refresh()
-            self.place_status.setText(f"{name} added to the app's weather, {where}")
-        self.display.mark(rel_deg, dist_nm)
+            self.place_status.setText(f"{name} placed, {where}. "
+                                      f"{len(self.placed)} placed in all.")
+        rel = (bearing - self.track + 540.0) % 360.0 - 180.0
+        self.display.mark(rel, dist_nm)
+        self._update_map(force=True)
+
+    def _placed_pos(self, item):
+        """Where a placed storm is now (app storms drift with the wind)."""
+        c = item["cell"]
+        return (c.x, c.y) if c is not None else (item["x"], item["y"])
+
+    def _unplace(self, bearing, dist_nm):
+        """Map right click: remove the placed storm under the cursor."""
+        b = math.radians(bearing)
+        x = self.ax + dist_nm * math.sin(b)
+        y = self.ay + dist_nm * math.cos(b)
+        best, best_d = None, None
+        for item in self.placed:
+            px, py = self._placed_pos(item)
+            d = math.hypot(px - x, py - y)
+            if d <= max(item["r"], self.place_map.range_nm * 0.04) and (
+                    best_d is None or d < best_d):
+                best, best_d = item, d
+        if best is None:
+            return
+        self.placed.remove(best)
+        if best["cell"] is not None:
+            self.weather.cells = [c for c in self.weather.cells if c is not best["cell"]]
+            self.full_refresh()
+            self.place_status.setText(f"Removed {best['label']}. {len(self.placed)} left.")
+        else:
+            self.place_status.setText(
+                f"Removed {best['label']} from the map. FlightGear keeps its clouds "
+                "until its weather is reloaded.")
+        self._update_map(force=True)
+
+    def _clear_placed(self):
+        mine = {id(p["cell"]) for p in self.placed if p["cell"] is not None}
+        self.weather.cells = [c for c in self.weather.cells if id(c) not in mine]
+        self.placed = []
+        self.full_refresh()
+        self._update_map(force=True)
+        self.place_status.setText("Placed weather cleared.")
 
     def _check_place(self):
         if not (self.fg and self.fg.connected):
@@ -321,6 +606,125 @@ class MainWindow(QMainWindow):
         elif result.startswith("OK"):
             result += ". The radar shows it within a few seconds."
         self.place_status.setText(result)
+
+    # ------------------------------------------------- other simulator (UDP)
+    def _source_changed(self, mode):
+        """Start listening for the other simulator in its mode, stop otherwise."""
+        if mode == UDP_MODE:
+            port = self.udp_port.value()
+            if self.udp and self.udp.listening and self.udp.port == port:
+                return
+            if self.udp:
+                self.udp.stop()
+            self.udp = UDPLink(port)
+            try:
+                self.udp.start()
+            except OSError as exc:
+                self.udp_error = str(exc)
+                self.status.setText(f"UDP port {port}: {exc}")
+                self.udp = None
+                return
+            self.udp_error = ""
+            self.origin = None      # the first packet becomes the map's (0, 0)
+            # Only the weather placed on the map: no made-up scenario storms.
+            self.scenario.setCurrentText("Clear")
+            self.regenerate()
+            self.status.setText(f"Listening on UDP port {port}.\n"
+                                "Run: python fake_plane.py")
+        elif self.udp:
+            self.udp.stop()
+            self.udp = None
+            self.status.setText("Not connected")
+
+    def _drive_fg(self):
+        """Move FlightGear's aircraft to the other plane. FlightGear then builds
+        its Detailed Weather around it, and the radar shows that weather."""
+        if not self.fdm_checked:
+            self.fdm_checked = True
+            try:
+                fdm = self.fg.get("/sim/flight-model")
+            except OSError:
+                fdm = ""
+            if fdm != "null":
+                self._notify(f"FlightGear flight model is '{fdm}': it will fight the "
+                             "other plane's position. Start FlightGear with --fdm=null", 15.0)
+        if not (self.udp and self.udp.live()):
+            return
+        u = self.udp.state
+        self.fg.drive = [
+            ("/position/latitude-deg", f"{u['lat']:.7f}"),
+            ("/position/longitude-deg", f"{u['lon']:.7f}"),
+            ("/position/altitude-ft", f"{u['alt_ft']:.1f}"),
+            ("/orientation/heading-deg", f"{u['heading']:.2f}"),
+            ("/orientation/pitch-deg", "0"),
+            ("/orientation/roll-deg", "0"),
+        ]
+
+    def _update_from_udp(self):
+        """Aircraft position from the other simulator. True while packets come."""
+        if self.udp is None or not self.udp.listening:
+            # Listening failed or stopped: try again (about once a second).
+            if time.monotonic() >= self.udp_retry:
+                self.udp_retry = time.monotonic() + 1.0
+                self.udp = None
+                self._source_changed(UDP_MODE)
+            if self.udp is None:
+                self.status.setText(f"NOT listening on UDP port {self.udp_port.value()}:\n"
+                                    f"{self.udp_error}\nRetrying...")
+                return False
+        if not (self.udp and self.udp.live()):
+            if self.udp:
+                wait = (f"no data for {time.monotonic() - self.udp.last_rx:.0f} s"
+                        if self.udp.packets else "waiting for data")
+                err = f"\n{self.udp.error}" if self.udp.error else ""
+                self.status.setText(f"UDP port {self.udp.port}: {wait}.\n"
+                                    f"Run: python fake_plane.py{err}")
+            return False
+        s = self.udp.state
+        if self.origin is None:
+            self.origin = (s["lat"], s["lon"])
+        self.ax, self.ay = self._to_nm(s["lat"], s["lon"])
+        self.heading = s["heading"]
+        gs = s.get("gs_kt", 0.0)
+        self.track = s.get("track", self.heading) if gs > 30.0 else self.heading
+        self.sim_gs = gs
+        fg = ("FlightGear follows it, weather from FlightGear" if self._fg_driven()
+              else "FlightGear not connected: only weather placed on the map")
+        self._set_status(f"UDP from {self.udp.sender[0]}: {self.udp.packets} packets\n"
+                         f"{s['lat']:.4f} {s['lon']:.4f}  HDG {self.heading:03.0f}  "
+                         f"{s['alt_ft']:.0f} ft\n{fg}")
+        return True
+
+    def _update_map(self, force=False):
+        """Redraw the placement map (about 10 times a second)."""
+        now = time.perf_counter()
+        if not force and (now < self.map_next or not self.map_panel.isVisible()):
+            return
+        self.map_next = now + 0.1
+        storms = []
+        # Other weather the radar sees, drawn faint.
+        placed_ids = {id(p["cell"]) for p in self.placed if p["cell"] is not None}
+        wx = self._scan_weather()
+        if wx is self.weather:
+            for c in self.weather.cells:
+                if id(c) not in placed_ids:
+                    storms.append((c.x - self.ax, c.y - self.ay, max(c.sx, c.sy),
+                                   max(0.0, (c.peak - 0.2) / 1.1), "", False))
+        elif wx is self.fg_weather:
+            for v in self.fg_weather.volumes:
+                storms.append((v["x"] - self.ax, v["y"] - self.ay, max(v["r1"], v["r2"]),
+                               float(v["data"].get("rain") or 0.5), "", False))
+        live_ids = {id(c) for c in self.weather.cells}
+        for p in self.placed:
+            if p["cell"] is not None and id(p["cell"]) not in live_ids:
+                continue                    # replaced by FlightGear's own weather
+            px, py = self._placed_pos(p)
+            storms.append((px - self.ax, py - self.ay, p["r"], p["rain"], p["label"], True))
+        alt, _ground = self._altitudes()
+        info = (f"HDG {self.heading:03.0f}  {alt:.0f} ft  GS {self.sim_gs:.0f} kt  "
+                f"Placed {len(self.placed)}")
+        self.place_map.set_view(self.heading, self.track, float(self.range.currentText()),
+                                storms, info)
 
     def _build_wxr_panel(self):
         """Weather radar control panel (pedestal) plus the EFIS WXR switch."""
@@ -413,9 +817,21 @@ class MainWindow(QMainWindow):
         self.voice.setToolTip("Spoken PWS alerts: 'WINDSHEAR AHEAD', "
                               "'GO AROUND, WINDSHEAR AHEAD', 'MONITOR RADAR DISPLAY'")
         v.addWidget(self.voice)
+        self.fallback_wx = QCheckBox("No FlightGear volumes: draw weather from\n"
+                                     "METAR / clouds (made-up places)")
+        self.fallback_wx.setChecked(True)
+        self.fallback_wx.setToolTip(
+            "When FlightGear has no weather volumes (Basic Weather, Detailed Weather "
+            "still building, or a scenario that built nothing), the app can draw "
+            "storms from the METAR or on FlightGear's cloud positions. Their places "
+            "are made up. Untick to show only FlightGear's real volumes: the radar "
+            "then stays empty when there are none (Basic Weather too). "
+            "Manual Configuration cloud layers are not affected.")
+        self.fallback_wx.toggled.connect(lambda _on: self.full_refresh())
         save = QPushButton("Save radar image")
         save.clicked.connect(self.save_image)
         v.addWidget(self.atten)
+        v.addWidget(self.fallback_wx)
         v.addWidget(save)
         return box
 
@@ -430,6 +846,12 @@ class MainWindow(QMainWindow):
 
     def _altitudes(self):
         """(aircraft altitude, ground elevation) in feet."""
+        if self.source.currentText() == UDP_MODE:
+            s = self.udp.state if self.udp else {}
+            if s:
+                fg = self.fg.state if (self.fg and self.fg.connected) else {}
+                return s["alt_ft"], s.get("ground_ft", fg.get("ground_ft", 0.0))
+            return float(self.sim_alt.value()), 0.0
         s = self.fg.state if (self.fg and self.fg.connected) else None
         if s:
             return s["alt_ft"], s.get("ground_ft", 0.0)
@@ -451,6 +873,8 @@ class MainWindow(QMainWindow):
     def regenerate(self, *_):
         self.weather.coverage = self.coverage.value() / 100
         self.weather.generate(self.scenario.currentText(), self.ax, self.ay, self.heading)
+        # Storms placed on the map stay when new scenario storms are made.
+        self.weather.cells += [p["cell"] for p in self.placed if p["cell"] is not None]
         self.full_refresh()
 
     def add_microburst(self):
@@ -523,7 +947,9 @@ class MainWindow(QMainWindow):
         self.synced_clouds = self.last_strike = None
         self.terrain = TerrainMap()
         self.last_fg_pos, self.was_reinit = None, False
-        self.source.setCurrentText("FlightGear")
+        self.fdm_checked = False
+        if self.source.currentText() != UDP_MODE:   # UDP: FlightGear follows the other plane
+            self.source.setCurrentText("FlightGear")
         self.status.setText("Connected, waiting for data...")
         self.connect_btn.setText("Disconnect")
 
@@ -549,7 +975,48 @@ class MainWindow(QMainWindow):
         msg, until = self.notice
         if msg and time.perf_counter() < until:
             text = f"{text}\n{msg}" if text else msg
+        if self.lw_warning:
+            text = f"{self.lw_warning}\n{text}" if text else self.lw_warning
         self.status.setText(text)
+
+    def _fallback_text(self):
+        """What the radar shows while FlightGear has no volumes."""
+        return ("storms from the METAR (made-up places)" if self.fallback_wx.isChecked()
+                else "nothing (no volumes, fallback off)")
+
+    def _check_lw_built(self, s):
+        """Warn when Detailed Weather is on but FlightGear built nothing.
+
+        FlightGear only writes the reason to its log file, so without this the
+        radar would show METAR storms over an empty sky with no explanation.
+        """
+        empty = (s.get("lw_selected") and not self.fg_weather.volumes
+                 and s.get("lw_tiles", 0) == 0 and not s.get("lw_loop"))
+        if not empty:
+            self.lw_empty_since = None
+            self.lw_warning = ""
+            return
+        now = time.perf_counter()
+        if self.lw_empty_since is None:
+            self.lw_empty_since = now
+        mgmt = (s.get("lw_mgmt") or "").strip()
+        ttype = (s.get("lw_type") or "").strip()
+        name = (s.get("scenario") or "").strip() or "This scenario"
+        radar = f"Radar: {self._fallback_text()}"
+        if mgmt and mgmt != "METAR" and ttype in ("manual", "live", ""):
+            # Shown at once: this never builds, however long you wait.
+            self.lw_warning = (f"⚠ Detailed Weather built nothing:\n"
+                               f"\"{name}\" has no tile, so Tile Selection Mode\n"
+                               f"must be METAR (now: {mgmt}). Set METAR, press Apply.\n"
+                               f"{radar}")
+        elif now - self.lw_empty_since > 30.0:
+            # Normal building takes ~20 s after Apply; longer means it is stuck.
+            why = ("FlightGear is PAUSED: unpause, then press Apply."
+                   if s.get("frozen") else
+                   "Press Apply in the Weather dialog (see fgfs.log for the error).")
+            self.lw_warning = f"⚠ Detailed Weather is on but built nothing.\n{why}\n{radar}"
+        else:
+            self.lw_warning = ""
 
     def _show_fg_weather(self, s):
         """Fill the 'FlightGear weather' box with everything FlightGear reports."""
@@ -651,12 +1118,13 @@ class MainWindow(QMainWindow):
     # --------------------------------------------------------------- loop
     def _scan_weather(self):
         """The weather the radar looks at right now."""
-        fg_on = (self.source.currentText() == "FlightGear"
-                 and self.fg and self.fg.connected)
+        fg_on = self._fg_wx_mode() and self.fg and self.fg.connected
         if fg_on and self.fg_weather.volumes:
             return self.fg_weather          # Detailed Weather zones
         if fg_on and self.manual_wx:
             return self.layer_weather       # Basic Weather, Manual Configuration
+        if fg_on and not self.fallback_wx.isChecked():
+            return self.no_weather          # no volumes, fallback off: nothing
         return self.weather
 
     def _scan(self, rays=None):
@@ -666,7 +1134,8 @@ class MainWindow(QMainWindow):
         """
         scan_weather = self._scan_weather()
         alt, ground = self._altitudes()
-        connected = self.fg and self.fg.connected
+        connected = (self.fg and self.fg.connected
+                     and (self.source.currentText() != UDP_MODE or self._fg_driven()))
         return self.scanner.scan(
             scan_weather, self.ax, self.ay, self.track,
             float(self.range.currentText()),
@@ -683,6 +1152,8 @@ class MainWindow(QMainWindow):
     def _update_from_fg(self, follow_weather=True):
         """Position always follows FlightGear; wind and METAR only if follow_weather."""
         if not (self.fg and self.fg.connected):
+            self.lw_warning = ""
+            self.lw_empty_since = None
             if self.fg and self.fg.reconnecting:
                 self.status.setText(f"Connection lost ({self.fg.error}).\n"
                                     "Reconnecting... FlightGear may be busy.")
@@ -741,6 +1212,7 @@ class MainWindow(QMainWindow):
             self.origin,
             s.get("alt_ft", 0.0)
         )
+        self._check_lw_built(s)
         if s is not self.shown_state:   # new values from FlightGear
             self.shown_state = s
             self._show_fg_weather(s)
@@ -777,10 +1249,10 @@ class MainWindow(QMainWindow):
             elif s.get("frozen"):
                 status = ("Detailed Weather on, but FlightGear is PAUSED:\n"
                           "it builds the weather after you unpause.\n"
-                          "Until then: storms from the METAR (made-up places)")
+                          f"Until then: {self._fallback_text()}")
             else:
                 status = ("Detailed Weather building clouds...\n"
-                          "Until then: storms from the METAR (made-up places)")
+                          f"Until then: {self._fallback_text()}")
             self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n{status}")
         elif self.fg_weather.volumes:
             self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
@@ -789,7 +1261,7 @@ class MainWindow(QMainWindow):
         else:
             # Basic Weather (or a tile code left over from earlier).
             self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n"
-                             "Basic Weather: storms drawn from the METAR")
+                             f"Basic Weather: {self._fallback_text()}")
 
         # Basic Weather: no positions, so build storms that match the METAR.
         # Weather changed inside FlightGear (not by our Send): show it on the radar.
@@ -834,6 +1306,8 @@ class MainWindow(QMainWindow):
         """
         self.fg.clear_cache()
         self.origin = None                  # centre the map on the new position
+        # Placed FlightGear storms were stored from the old map centre.
+        self.placed = [p for p in self.placed if p["cell"] is not None]
         self.synced_clouds = self.last_strike = None
         self.shown_state = None
         self.fg_metar = None
@@ -850,8 +1324,7 @@ class MainWindow(QMainWindow):
     def _wx_source(self):
         """Label for the screen: where the weather on the radar comes from,
         and whether it is only approximate (shown amber)."""
-        fg_on = (self.source.currentText() == "FlightGear"
-                 and self.fg and self.fg.connected)
+        fg_on = self._fg_wx_mode() and self.fg and self.fg.connected
         if not fg_on:
             return ("SIM WX", False)
         s = self.fg.state or {}
@@ -862,6 +1335,8 @@ class MainWindow(QMainWindow):
             return (f"FG VOLUMES {len(self.fg_weather.volumes)}{shaped}", False)
         if self.manual_wx:
             return ("FG LAYERS", False)
+        if not self.fallback_wx.isChecked():
+            return ("NO VOLUMES", True)     # fallback off: radar left empty
         if s.get("lw_code") and s.get("clouds"):
             return (f"CLOUD ECHO {len(s['clouds'])}", True)
         if s.get("lw_selected"):
@@ -890,6 +1365,8 @@ class MainWindow(QMainWindow):
             f"FlightGear radar volumes: {len(self.fg_weather.volumes)}"
             if self.fg_weather.volumes
             else f"Detailed Weather: {len(clouds)} cloud echoes ({code})"
+            if self.fallback_wx.isChecked()
+            else f"Detailed Weather: no volumes, fallback off ({len(clouds)} clouds not drawn)"
         )
         self._set_status(f"Connected  ALT {s['alt_ft']:.0f} ft\n{radar_source}")
 
@@ -917,13 +1394,22 @@ class MainWindow(QMainWindow):
 
         # While connected the aircraft always follows FlightGear. The Mode only
         # decides where the weather comes from: FlightGear, or the app (to Send).
-        fg_mode = self.source.currentText() == "FlightGear"
+        udp_mode = self.source.currentText() == UDP_MODE
+        fg_driven = self._fg_driven()
+        if fg_driven:
+            self._drive_fg()
+        fg_mode = self.source.currentText() == "FlightGear" or fg_driven
         if fg_mode and not self.was_fg_mode:
             # Back in FlightGear mode: read FlightGear's weather again, so edits
             # made in Simulated mode (and not sent) leave the radar.
             self.fg_metar = None
         self.was_fg_mode = fg_mode
-        fg_live = self._update_from_fg(follow_weather=fg_mode)
+        # Other simulator: its position only, the FlightGear link is not used.
+        # With FlightGear connected, FlightGear follows it and gives the weather.
+        fg_live = (False if udp_mode and not fg_driven
+                   else self._update_from_fg(follow_weather=fg_mode))
+        if fg_live and udp_mode:
+            self._update_from_udp()     # exact position straight from the other plane
         fg_weather = fg_live and fg_mode
         fg_wind = fg_weather and "wind_from" in self.fg.state
         # Weather comes from FlightGear when live; the pilot only has radar controls.
@@ -935,8 +1421,8 @@ class MainWindow(QMainWindow):
         self.burst_btn.setEnabled(not fg_weather)
         self.wind_dir.setEnabled(not fg_wind)
         self.wind_kt.setEnabled(not fg_wind)
-        self.sim_heading.setEnabled(not fg_live)
-        self.time_scale.setEnabled(not fg_live)
+        self.sim_heading.setEnabled(not fg_live and not udp_mode)
+        self.time_scale.setEnabled(not fg_live and not udp_mode)
         # Send is for preparing weather: connected, but in Simulated mode.
         self.send_btn.setEnabled(fg_live and not fg_mode)
         if not fg_weather:
@@ -950,6 +1436,16 @@ class MainWindow(QMainWindow):
             source = "FLIGHTGEAR" if fg_mode else "FG  WX EDIT"
             if s.get("frozen"):
                 source += "  PAUSED"
+            # Keep the box in step if FlightGear is paused / unpaused there (P key).
+            frozen = bool(s.get("frozen"))
+            if self.hold_still.isChecked() != frozen:
+                self.hold_still.blockSignals(True)
+                self.hold_still.setChecked(frozen)
+                self.hold_still.blockSignals(False)
+        elif udp_mode:
+            # Position from the other simulator; storms drift in real time.
+            scale = 1.0
+            source = "OTHER SIM" if self._update_from_udp() else "OTHER SIM  NO DATA"
         else:
             scale, source = float(self.time_scale.value()), "SIM"
             # Turn towards the selected heading at 3 degrees per second.
@@ -963,9 +1459,12 @@ class MainWindow(QMainWindow):
             ve = SIM_SPEED_KT * math.sin(h) + wk * math.sin(to)
             vn = SIM_SPEED_KT * math.cos(h) + wk * math.cos(to)
             self.track = math.degrees(math.atan2(ve, vn)) % 360.0
-            self.sim_gs = math.hypot(ve, vn)
-            self.ax += ve / 3600.0 * dt * scale
-            self.ay += vn / 3600.0 * dt * scale
+            if self.hold_still.isChecked():
+                self.sim_gs = 0.0                    # parked: weather is placed around it
+            else:
+                self.sim_gs = math.hypot(ve, vn)
+                self.ax += ve / 3600.0 * dt * scale
+                self.ay += vn / 3600.0 * dt * scale
 
         self.weather.step(dt * scale)
         self.layer_weather.step(dt * scale, self.weather.wind_from, self.weather.wind_kt)
@@ -994,7 +1493,16 @@ class MainWindow(QMainWindow):
         # magnetic heading; the difference to true (variation) turns the rest.
         var = 0.0
         if fg_live and "hdg_mag" in self.fg.state:
-            var = (self.heading - self.fg.state["hdg_mag"] + 180.0) % 360.0 - 180.0
+            # FlightGear's own true and magnetic heading: their difference is
+            # the variation, even if FlightGear points elsewhere than the
+            # other plane (only a few degrees, e.g. about 1 at Delhi).
+            true_hdg = self.fg.state.get("heading", self.heading)
+            var = (true_hdg - self.fg.state["hdg_mag"] + 180.0) % 360.0 - 180.0
+            if abs(var) > 30.0:
+                var = 0.0           # nonsense value: do not turn the display by it
+        if udp_mode and self.udp and self.udp.live():
+            # Speed of the other plane, not of FlightGear's aircraft.
+            gs = tas = self.udp.state.get("gs_kt", 0.0)
         if fg_live:
             bug = self.fg.state.get("hdg_bug")           # already magnetic
         else:
@@ -1021,6 +1529,8 @@ class MainWindow(QMainWindow):
                                               and self.scanner.ground_share()
                                               > GND_CLUTTER_SHARE))
         self.display.advance(self._scan, dt)
+        self._update_map()
+        self._fly_fake(now)
 
 
 if __name__ == "__main__":

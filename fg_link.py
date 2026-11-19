@@ -34,6 +34,14 @@ LW_CODE = "/local-weather/tiles/code"
 # old tile code stays in the tree after switching back to Basic Weather.
 LW_MODE = "/nasal/local_weather/enabled"     # true only while Detailed Weather runs
 LW_TILE_COUNTER = "/local-weather/tiles/tile-counter"
+# What Detailed Weather was asked to build, and whether it is building. A
+# scenario without a tile (Stormy Monday, Fair weather...) has tile-type
+# "manual" and only builds in Tile Selection Mode "METAR"; in any other mode
+# FlightGear logs "Tile not implemented." and builds nothing.
+LW_TILE_MGMT = "/local-weather/tmp/tile-management"
+LW_TILE_TYPE = "/local-weather/tmp/tile-type"
+LW_TILE_LOOP = "/local-weather/tile-loop-flag"     # 1 while areas are being managed
+SCENARIO = "/environment/weather-scenario"
 LW_CLOUD = "/local-weather/clouds/tile[{t}]/cloud[{c}]/position/{name}"
 LIGHTNING_PROPS = {
     "strike_lat": "/local-weather/lightning/latitude-deg",
@@ -141,7 +149,8 @@ WX_VOLUME_FIELDS = (
 FAST_PROPS = {**POSITION_PROPS, **WIND_PROPS, **LIGHTNING_PROPS,
               "metar": METAR_PROPERTY, "lw_code": LW_CODE, "frozen": FROZEN,
               "lw_mode": LW_MODE, "lw_tiles": LW_TILE_COUNTER, "reinit": REINIT,
-              "station": LW_STATION, **NUMBER_PROPS}
+              "station": LW_STATION, "lw_mgmt": LW_TILE_MGMT, "lw_type": LW_TILE_TYPE,
+              "lw_loop": LW_TILE_LOOP, "scenario": SCENARIO, **NUMBER_PROPS}
 
 
 def _num(text):
@@ -200,6 +209,9 @@ class FGLink:
         self.error = ""
         self._thread = None
         self._stop = threading.Event()
+        # Properties to write on the next poll (the app moves FlightGear's
+        # aircraft to another simulator's plane). Latest value wins.
+        self.drive = None
 
     # ------------------------------------------------------------ connect
     def _open(self):
@@ -299,6 +311,9 @@ class FGLink:
         self._next_clouds = self._next_slow = 0.0
         while not self._stop.is_set():
             try:
+                drive, self.drive = self.drive, None
+                if drive:
+                    self.set_many(drive)
                 self._poll_once()
                 bad = 0
             except ValueError as exc:
@@ -347,6 +362,11 @@ class FGLink:
         new["lw_code"] = code
         # True only when FlightGear clearly says Detailed Weather is chosen.
         new["lw_selected"] = raw["lw_mode"].lower() in ("1", "true")
+        new["lw_mgmt"] = raw["lw_mgmt"]
+        new["lw_type"] = raw["lw_type"]
+        new["lw_loop"] = _flag(raw["lw_loop"]) or (_num(raw["lw_loop"]) or 0) > 0
+        new["lw_tiles"] = int(_num(raw["lw_tiles"]) or 0)
+        new["scenario"] = raw["scenario"]
         now = time.monotonic()
         if code and now >= self._next_clouds:
             self.clouds = self._read_clouds(int(_num(raw["lw_tiles"]) or 0))
