@@ -1,9 +1,11 @@
-"""Check: weather placed on the map, around a position from fake_plane, shows on the radar.
+"""Check the weather map and the radar.
 
 Runs without a screen and without any simulator:  python test_place_map.py
 
-The test plays fake_plane (UDP packets, parked, heading 090), clicks the map
-at bearings all round the aircraft, and checks where the radar paints them.
+1. Other simulator (UDP, fake_plane packets) WITHOUT FlightGear: placing is
+   refused and the radar stays empty (weather only comes from FlightGear).
+2. Simulated mode, aircraft held still on heading 090: clicks on the map at
+   bearings all round the aircraft show at the right place on the radar.
 """
 import json
 import os
@@ -54,7 +56,22 @@ def main_test():
     print(f"Aircraft from UDP: heading {win.heading:.0f}, track {win.track:.0f}, "
           f"alt {win._altitudes()[0]:.0f} ft")
     assert abs(win.heading - HDG) < 0.1
-    assert not win.weather.cells, "UDP mode should start with no scenario storms"
+    win._place(90, 15)
+    win.tick()
+    ok = not win.placed and not win.weather.cells and strongest(win)[2] == 0
+    print(f"{'OK  ' if ok else 'FAIL'} UDP without FlightGear: placing refused, radar empty")
+    if not ok:
+        return 1
+    win.udp.stop()
+
+    # The map itself, in Simulated mode (aircraft held still, heading 090).
+    win.source.setCurrentText("Simulated")
+    win.scenario.setCurrentText("Clear")
+    win.regenerate()
+    win.hold_still.setChecked(True)
+    win.sim_heading.setValue(int(HDG))
+    win.heading = win.track = HDG
+    win.tick()
 
     failures = 0
     for bearing, dist, should_show in [(120, 20, True), (60, 25, True), (90, 15, True),
@@ -62,7 +79,6 @@ def main_test():
         win._clear_placed()
         win.place_kind.setCurrentText("Thunderstorm")
         win._place(bearing, dist)
-        send(sock, 2)
         win.tick()
         rel_want = (bearing - HDG + 540) % 360 - 180
         rel, rng, lvl = strongest(win)
@@ -102,7 +118,6 @@ def main_test():
     img.save("test_place_map.png")
     print("Screenshot: test_place_map.png")
 
-    win.udp.stop()
     print("ALL OK" if not failures else f"{failures} FAILED")
     return failures
 

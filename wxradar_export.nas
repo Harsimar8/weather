@@ -50,6 +50,7 @@ var export_volumes = func {
         n.getNode("source", 1).setValue(contains(ev, "wxradar_placed")
                                         ? "placed from map (" ~ ev.wxradar_placed ~ ")"
                                         : "Detailed Weather");
+        n.getNode("placed-id", 1).setValue(contains(ev, "wxradar_id") ? ev.wxradar_id : 0);
         n.getNode("valid", 1).setValue(1);
     }
     # Remove volumes left over from an earlier, bigger export.
@@ -144,8 +145,15 @@ var terrain_loop = func {
 #   kind          shower | cb | thunderstorm
 #   latitude-deg, longitude-deg, radius-m, rain (0..1), turbulence (0..1, 0 = none),
 #   base-agl-ft   cloud base above the ground at that spot
+# Everything each placed storm made, by its request number, so it can be removed:
+#   vols: effect volumes, clouds: cloud objects, models: [cloud node, model node],
+#   echo: FlightGear radar echo node
+var placed = {};
+
 var place_weather = func {
     var p = props.globals.getNode("/wxradar/place", 1);
+    var id = "" ~ p.getValue("request");    # text key (telnet values may be text)
+    var rec = {vols: [], clouds: [], models: [], echo: nil};
     if (!contains(globals, "local_weather") or !contains(local_weather, "effectVolumeArray")
         or !getprop("/nasal/local_weather/enabled")) {
         p.getNode("result", 1).setValue("FAILED: Detailed Weather is off");
@@ -206,6 +214,8 @@ var place_weather = func {
         # Mark every volume this click made, so the export can tell them
         # from Detailed Weather's own volumes (see "source" in export_volumes).
         ev.wxradar_placed = kind;
+        ev.wxradar_id = num(id);    # exported, so the app knows when it is gone
+        append(rec.vols, ev);
         if (ev.rain_flag != 1) continue;
         ev.r1 = radius;
         ev.r2 = radius;
@@ -234,7 +244,9 @@ var place_weather = func {
     e.getNode("turbulence-norm", 1).setValue(turb);
     e.getNode("type", 1).setValue("single_cell");
     e.getNode("show", 1).setValue(1);
-    var shown = draw_queued_clouds(q_new, q_old);
+    rec.echo = e;
+    placed[id] = rec;
+    var shown = draw_queued_clouds(q_new, q_old, rec);
     p.getNode("result", 1).setValue(sprintf("OK: %s at %.4f %.4f, base %d ft, top %d ft, %d volume(s), %d cloud(s), FG echo %d",
                                             kind, lat, lon, base, top, changed, shown, i));
 };
@@ -242,7 +254,7 @@ var place_weather = func {
 # Take the clouds that place_weather just queued out of Detailed Weather's
 # queues and draw them now (a few per frame), instead of waiting for the next
 # weather tile. Returns how many clouds were taken.
-var draw_queued_clouds = func(q_new, q_old) {
+var draw_queued_clouds = func(q_new, q_old, rec) {
     var lw = local_weather;
     # New cloud system (cloud objects).
     var mine_new = [];
@@ -273,11 +285,19 @@ var draw_queued_clouds = func(q_new, q_old) {
     var step = func {
         var stop = math.min(size(mine_new) + size(mine_old), k + 20);
         for (; k < stop; k += 1) {
-            if (k < size(mine_new))
+            if (k < size(mine_new)) {
                 lw.create_cloud_new(mine_new[k]);
-            else {
+                append(rec.clouds, mine_new[k]);
+            } else {
                 var c = mine_old[k - size(mine_new)];
                 lw.create_cloud(c[0], c[1], c[2], c[3], c[4]);
+                # The nodes create_cloud just made (remember them for removal).
+                var cn = props.globals.getNode("/local-weather/clouds", 1);
+                var t = cn.getChild("tile", getprop("/local-weather/tiles/tile-counter") or 0, 0);
+                var cl = (t == nil) ? nil : t.getChild("cloud", cn.getValue("placement-index") or 0, 0);
+                var m = props.globals.getNode("/models", 1).getChild("model",
+                            cn.getValue("model-placement-index") or 0, 0);
+                append(rec.models, [cl, m]);
             }
         }
         if (k < size(mine_new) + size(mine_old))
@@ -298,6 +318,88 @@ setlistener("/wxradar/place/request", func(n) {
         p.getNode("result", 1).setValue("FAILED: " ~ err[0]);
         logprint(LOG_WARN, "wxradar_export place: ", err[0]);
     }
+}, 0, 1);
+
+# Remove placed storms: clouds, effect volumes and the FlightGear radar echo.
+var index_of = func(vec, x) {
+    forindex (var i; vec)
+        if (vec[i] == x) return i;
+    return -1;
+};
+
+var remove_placed = func(id) {
+    if (!contains(placed, id)) return [0, 0];
+    var rec = placed[id];
+    delete(placed, id);
+    var lw = local_weather;
+    var wtm = weather_tile_management;
+    var nv = 0;
+    foreach (var ev; rec.vols) {
+        var i = index_of(lw.effectVolumeArray, ev);
+        if (i < 0) continue;            # already gone (its tile was removed)
+        lw.effectVolumeArray = wtm.delete_from_vector(lw.effectVolumeArray, i);
+        lw.n_effectVolumeArray = size(lw.effectVolumeArray);
+        nv += 1;
+    }
+    var nc = 0;
+    foreach (var c; rec.clouds) {
+        var i = index_of(wtm.cloudArray, c);
+        if (i >= 0) wtm.cloudArray = wtm.delete_from_vector(wtm.cloudArray, i);
+        c.remove();
+        nc += 1;
+    }
+    foreach (var pair; rec.models) {
+        var cl = pair[0];
+        var m = pair[1];
+        if (m != nil) {
+            var path = m.getPath();
+            for (var i = size(wtm.cloudSceneryArray) - 1; i >= 0; i -= 1)
+                if (wtm.cloudSceneryArray[i].modelNode.getPath() == path)
+                    wtm.cloudSceneryArray = wtm.delete_from_vector(wtm.cloudSceneryArray, i);
+            m.remove();
+        }
+        if (cl != nil) cl.remove();
+        nc += 1;
+    }
+    if (rec.echo != nil) rec.echo.remove();
+    return [nv, nc];
+};
+
+# The app writes the numbers to remove ("all" = every placed storm) to
+# /wxradar/place/remove-ids, then a new number in remove-request.
+setlistener("/wxradar/place/remove-request", func(n) {
+    if (!alive()) return;
+    var p = props.globals.getNode("/wxradar/place", 1);
+    if (n.getValue() == p.getValue("remove-done")) return;
+    p.getNode("remove-done", 1).setValue(n.getValue());
+    var text = p.getValue("remove-ids") or "";
+    var ids = (text == "all") ? keys(placed) : split(",", text);
+    var nv = 0;
+    var nc = 0;
+    var err = [];
+    foreach (var id; ids) {
+        if (id == "") continue;
+        var r = call(remove_placed, ["" ~ id], nil, nil, err);
+        if (size(err)) break;
+        nv += r[0];
+        nc += r[1];
+    }
+    if (text == "all" and !size(err)) {
+        # Also volumes placed before this script was (re)loaded: not in 'placed'.
+        var lw = local_weather;
+        for (var i = size(lw.effectVolumeArray) - 1; i >= 0; i -= 1)
+            if (contains(lw.effectVolumeArray[i], "wxradar_placed")) {
+                lw.effectVolumeArray = weather_tile_management.delete_from_vector(
+                    lw.effectVolumeArray, i);
+                nv += 1;
+            }
+        lw.n_effectVolumeArray = size(lw.effectVolumeArray);
+    }
+    if (size(err)) {
+        p.getNode("remove-result", 1).setValue("FAILED: " ~ err[0]);
+        logprint(LOG_WARN, "wxradar_export remove: ", err[0]);
+    } else
+        p.getNode("remove-result", 1).setValue(sprintf("REMOVED: %d volume(s), %d cloud(s)", nv, nc));
 }, 0, 1);
 
 settimer(volume_loop, 2, 1);

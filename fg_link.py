@@ -121,6 +121,7 @@ MAX_TILES = 20        # newest cloud tiles to look at
 WX_VOLUME_COUNT = "/wxradar/volumes/count"
 
 WX_VOLUME_FIELDS = (
+    "placed-id",          # number of the storm placed from the map (0 = Detailed Weather)
     "geometry",
     "latitude-deg",
     "longitude-deg",
@@ -461,4 +462,15 @@ class FGLink:
             (PLACE + "/turbulence", f"{turb:.2f}"),
             (PLACE + "/base-agl-ft", f"{base_agl_ft:.0f}"),
             (PLACE + "/request", request),       # last: this starts the build
+        ])
+        return request          # the storm's number: used to remove it again
+
+    def remove_weather(self, ids):
+        """Ask wxradar_export.nas to delete placed storms (clouds, volumes and
+        FlightGear radar echo). ids: numbers returned by place_weather."""
+        request = int(time.time() * 1000) % 1_000_000_000
+        self.set_many([
+            (PLACE + "/remove-result", "waiting"),
+            (PLACE + "/remove-ids", ",".join(str(i) for i in ids)),
+            (PLACE + "/remove-request", request),
         ])

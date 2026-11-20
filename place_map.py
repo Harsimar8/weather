@@ -1,8 +1,7 @@
 """Weather placement map: north-up plan view centred on the aircraft.
 
-Left click places weather there, right click removes the placed storm under
-the cursor, the mouse wheel changes the range. The map only draws and reports
-clicks; MainWindow builds the weather.
+A click is sent to the app, which adds a storm, removes one, or does nothing
+(the Off / Add storm / Remove storm buttons). The mouse wheel changes the range.
 """
 import math
 
@@ -33,14 +32,14 @@ def rain_colour(rain):
 
 class PlaceMap(QWidget):
     placed = Signal(float, float)    # true bearing (deg), distance (NM) from the aircraft
-    removed = Signal(float, float)   # same, for a right click
+    removed = Signal(float, float)   # not used any more (kept for old code)
     range_changed = Signal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(320, 320)
         self.setMouseTracking(True)
-        self.setCursor(Qt.CrossCursor)
+        self.setCursor(Qt.ArrowCursor)
         self.range_nm = 40
         self.heading = 0.0
         self.track = 0.0
@@ -48,10 +47,11 @@ class PlaceMap(QWidget):
         self.storms = []      # (dx, dy, r_nm, rain, label, placed) dx/dy NM east/north of aircraft
         self.info = ""        # line at the bottom (position)
         self.hover = None     # (bearing, dist) under the cursor
+        self.trail = []       # (dx, dy) NM: where the aircraft has been, oldest first
 
     # ------------------------------------------------------------ data in
-    def set_view(self, heading, track, radar_range, storms, info):
-        self.heading, self.track = heading, track
+    def set_view(self, heading, track, radar_range, storms, info, trail=()):
+        self.heading, self.track, self.trail = heading, track, list(trail)
         self.radar_range, self.storms, self.info = radar_range, storms, info
         self.update()
 
@@ -79,10 +79,8 @@ class PlaceMap(QWidget):
     # ------------------------------------------------------------ mouse
     def mousePressEvent(self, event):
         bearing, dist = self._to_polar(event.position())
-        if event.button() == Qt.LeftButton:
+        if event.button() == Qt.LeftButton:     # the app decides: add / remove / off
             self.placed.emit(bearing, dist)
-        elif event.button() == Qt.RightButton:
-            self.removed.emit(bearing, dist)
 
     def mouseMoveEvent(self, event):
         self.hover = self._to_polar(event.position())
@@ -152,6 +150,17 @@ class PlaceMap(QWidget):
                 if label:
                     p.setPen(TEXT)
                     p.drawText(QPointF(q.x() + rad + 3, q.y() + 4), label)
+
+        # Trail: where the aircraft has flown (the map moves with it).
+        if self.trail:
+            pts = [self._to_screen(dx, dy) for dx, dy in self.trail] + [c]
+            p.setPen(QPen(QColor(255, 255, 255, 140), 1.5, Qt.DotLine))
+            for a, b in zip(pts, pts[1:]):
+                p.drawLine(a, b)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(255, 255, 255, 170))
+            for q in pts[:-1:5]:
+                p.drawEllipse(q, 2.0, 2.0)
 
         self._draw_plane(p, c)
 
