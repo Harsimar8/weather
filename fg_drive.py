@@ -4,13 +4,18 @@ The other plane's position comes about 10 times a second. Setting FlightGear
 only then makes its aircraft jump (at 480 kt: 25 m per jump), and the main
 FlightGear link is sometimes busy for a second reading clouds and volumes.
 
-So this uses its own telnet connection and its own thread, and sets the
-position up to 30 times a second. Between packets it moves the aircraft on
-along its track at its ground speed (prediction), so the motion is smooth.
+So this uses its own connection and its own thread, and sets the position
+up to 30 times a second. Between packets it moves the aircraft on along its
+track at its ground speed (prediction), so the motion is smooth.
 
-Each update ends with a question, and the next update waits for the answer.
-A slow FlightGear (few frames per second) then gets fewer updates instead of
-a growing queue of old positions, which would make it lag and jerk.
+Two ways to send:
+- UDP (default, light): one short line "lat,lon,alt,hdg,pitch,roll", 30 times
+  a second, no answer awaited. FlightGear reads it with the generic protocol
+  wxradar-in.xml (copy it to fgdata/Protocol) and the start option
+  --generic=socket,in,30,127.0.0.1,5510,udp,wxradar-in
+- Telnet (fallback): 7 commands per update, each update waits for FlightGear's
+  answer (a slow FlightGear then gets fewer updates instead of a queue of old
+  positions). Used when FlightGear does not follow the UDP lines.
 
 FlightGear must run with --fdm=null, or its flight model moves it back.
 """
@@ -21,15 +26,19 @@ import time
 
 RATE_HZ = 30.0
 MAX_PREDICT_S = 1.0      # packets stopped: do not fly on for ever
+UDP_PORT = 5510          # FlightGear listens here (--generic=socket,in,...,5510,udp,wxradar-in)
 
 
 class FGDriver:
-    def __init__(self, host, port):
-        self.host, self.port = host, port
+    def __init__(self, host, port, udp_port=UDP_PORT):
+        self.host, self.port, self.udp_port = host, port, udp_port
+        self.mode = "udp"        # "udp" (light) or "telnet" (fallback)
         self.target = None       # dict lat, lon, alt_ft, heading, gs_kt, track, t
         self.error = ""
         self.sent = 0
-        self.fps = None          # FlightGear frames per second (from its answers)
+        self.fps = None          # FlightGear frames per second (telnet answers only)
+        self._udp = None
+        self._udp_addr = None
         self._sock = None
         self._reader = None
         self._stop = threading.Event()
@@ -39,6 +48,13 @@ class FGDriver:
     def stop(self):
         self._stop.set()
         self._close()
+        if self._udp:
+            self._udp.close()
+            self._udp = None
+
+    def use_telnet(self):
+        """FlightGear does not read the UDP lines: send by telnet instead."""
+        self.mode = "telnet"
 
     def _close(self):
         if self._sock:
@@ -82,7 +98,20 @@ class FGDriver:
         while not self._stop.is_set():
             start = time.monotonic()
             pos = self.position()
-            if pos:
+            if pos and self.mode == "udp":
+                try:
+                    if not self._udp:
+                        self._udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                        self._udp_addr = (socket.gethostbyname(self.host), self.udp_port)
+                    lat, lon, alt, hdg = pos
+                    line = f"{lat:.8f},{lon:.8f},{alt:.1f},{hdg:.2f},0,0\n"
+                    self._udp.sendto(line.encode(), self._udp_addr)
+                    self.sent += 1
+                    self.error = ""
+                except OSError as exc:
+                    self.error = str(exc)
+                    self._stop.wait(1.0)
+            elif pos:
                 try:
                     if not self._sock:
                         self._connect()

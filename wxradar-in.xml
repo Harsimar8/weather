@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+
+<PropertyList>
+ <comment>
+  <![CDATA[
+    Weather radar app: moves FlightGear's aircraft over UDP (fg_drive.py).
+
+    Copy this file into FlightGear's Protocol folder (fgdata\Protocol) and
+    start FlightGear with:
+
+        --generic=socket,in,30,127.0.0.1,5510,udp,wxradar-in --fdm=null
+
+    The app sends one line 30 times a second, no answer needed:
+        lat,lon,alt_ft,heading,pitch,roll
+  ]]>
+ </comment>
+
+ <generic>
+  <input>
+   <line_separator>newline</line_separator>
+   <var_separator>,</var_separator>
+
+   <chunk>
+    <name>latitude-deg</name>
+    <type>double</type>
+    <node>/position/latitude-deg</node>
+   </chunk>
+
+   <chunk>
+    <name>longitude-deg</name>
+    <type>double</type>
+    <node>/position/longitude-deg</node>
+   </chunk>
+
+   <chunk>
+    <name>altitude-ft</name>
+    <type>float</type>
+    <node>/position/altitude-ft</node>
+   </chunk>
+
+   <chunk>
+    <name>heading-deg</name>
+    <type>float</type>
+    <node>/orientation/heading-deg</node>
+   </chunk>
+
+   <chunk>
+    <name>pitch-deg</name>
+    <type>float</type>
+    <node>/orientation/pitch-deg</node>
+   </chunk>
+
+   <chunk>
+    <name>roll-deg</name>
+    <type>float</type>
+    <node>/orientation/roll-deg</node>
+   </chunk>
+  </input>
+ </generic>
+</PropertyList>

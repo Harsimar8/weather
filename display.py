@@ -40,7 +40,8 @@ class RadarDisplay(QWidget):
                      "range": 40, "on": True, "mode": "WX", "tilt": 0.0,
                      "auto_tilt": False, "gain_db": 0.0, "gain_cal": True,
                      "source": "SIM", "pws": None,
-                     "wx_src": None, "gnd_clutter": False}
+                     "wx_src": None, "gnd_clutter": False,
+                     "hail": []}          # hail icons: (degrees right of up, NM)
         self.frame = QImage()
         self.marks = []           # recent clicks: (rel_deg, dist_nm, until)
         self._build_pixel_map()
@@ -208,6 +209,7 @@ class RadarDisplay(QWidget):
         p.drawText(QRectF(W - 210, 26, 200, 20), Qt.AlignRight, f"RNG {rng} NM")
 
         self._draw_pws(p)
+        self._draw_hail(p)
         self._draw_wxr_status(p)
         self._draw_gnd_label(p)
 
@@ -271,6 +273,29 @@ class RadarDisplay(QWidget):
             p.setPen(RED if pws["level"] == "warning" else AMBER)
             p.drawText(QRectF(W - 270, CY - R * 0.56, 200, 26),
                        Qt.AlignRight | Qt.AlignVCenter, "WINDSHEAR")
+
+    def _draw_hail(self, p):
+        """Hail icon on each storm likely to hold hail: a white upside-down
+        triangle with hailstones in it, on the storm itself."""
+        if not self.transmitting() or self.info["mode"] not in ("WX", "WX+T"):
+            return
+        scale = R / self.info["range"]
+        for rel, dist in self.info.get("hail") or []:
+            if dist > self.info["range"] or abs(rel) > self.half:
+                continue
+            c = self._polar(dist * scale, rel)
+            s = 9.0
+            tri = QPolygonF([QPointF(c.x() - s, c.y() - s * 0.8),
+                             QPointF(c.x() + s, c.y() - s * 0.8),
+                             QPointF(c.x(), c.y() + s)])
+            p.setPen(QPen(WHITE, 2))
+            p.setBrush(QColor(0, 0, 0, 200))
+            p.drawPolygon(tri)
+            p.setPen(Qt.NoPen)
+            p.setBrush(WHITE)
+            for dx, dy in ((-3.5, -3.0), (3.5, -3.0), (0.0, 2.0)):
+                p.drawEllipse(QPointF(c.x() + dx, c.y() + dy), 1.6, 1.6)
+            p.setBrush(Qt.NoBrush)
 
     def _draw_gnd_label(self, p):
         """'GND' written on the ground clutter itself, where most of it is.

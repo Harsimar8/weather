@@ -20,7 +20,8 @@ range rings, GS/TAS and wind). The radar annunciation (for example
 - **WXR**: the EFIS switch. Off removes the weather from the ND.
 - **Mode**: `OFF`, `STBY` (radar on but not sending a beam), `TEST` (color
   test pattern plus the windshear test icon), `WX`, `WX+T` (turbulence in
-  magenta within 40 NM) and `MAP` (ground mapping: cyan/yellow/magenta).
+  magenta within 40 NM; the gain knob does not change it, like a real
+  Doppler radar) and `MAP` (ground mapping: cyan/yellow/magenta).
 - **Predictive windshear (PWS)**: works on its own below 2300 ft above the
   ground, whatever the mode. It looks 5 NM ahead (+/- 40 deg) for a
   microburst (heavy rain with violent air low down). Shown as red/black
@@ -46,6 +47,20 @@ degrees wide and only sees weather at the heights it passes through, so a
 storm can be missed if the beam goes over its top. Simulated storms get a
 height from their strength. FlightGear weather volumes use their own base and
 top altitudes.
+
+**Storm shapes** (Simulated mode, Scenario box): "Isolated hook cell",
+"Finger cell", "U-shape cell" and "Scalloped cell" are the warning shapes of the
+Airbus weather radar briefing note (Figure 8), each a violent storm with
+turbulence. FlightGear volumes are only circles, ellipses or boxes, so these
+shapes cannot come from FlightGear.
+
+**Hail icon** (white upside-down triangle with dots, WX and WX+T): no radar
+sees hail itself, and FlightGear has no hail data either. The app guesses it
+the way ground radars do (Waldvogel 1979, also used by NEXRAD): a FlightGear
+rain volume gets the icon when its 45 dBZ echo, as the radar would see it (ice
+weakening above the freezing level included), still reaches 4,600 ft (1.4 km)
+or more above the freezing level. Needs the freezing level; FlightGear volumes
+only.
 
 ## Files
 
@@ -117,6 +132,30 @@ top altitudes.
   coastlines (water gives almost no echo), and mountains hide what is behind
   them. Only scenery FlightGear has loaded is known; beyond it the old
   made-up ground texture is used.
+
+### Moving FlightGear's aircraft (other simulator / fake plane)
+
+The app moves FlightGear's aircraft over UDP (light, no waiting). Once:
+copy `wxradar-in.xml` into FlightGear's `fgdata\Protocol` folder. Then start
+FlightGear with these Additional Settings:
+
+    --telnet=5401
+    --disable-real-weather-fetch
+    --fdm=null
+    --generic=socket,in,30,127.0.0.1,5510,udp,wxradar-in
+    --timeofday=noon
+    --disable-ai-traffic
+    --disable-random-objects
+    --disable-random-buildings
+    --disable-random-vegetation
+    --disable-sound
+    --fog-fastest
+    --prop:/sim/rendering/shaders/quality-level=0
+
+If FlightGear does not follow the UDP position (option or file missing), the
+app switches to telnet by itself (slower, can jerk) and says so. Under the
+status the app shows FlightGear's frames per second: green 25+ smooth, amber
+15-25, red below 15 jerky.
 
 `wxradar_export.nas` can be loaded more than once (Nasal folder at start-up
 plus `test_fg_export.py`): each copy stops the older ones, so the work is

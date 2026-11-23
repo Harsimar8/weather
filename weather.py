@@ -15,6 +15,9 @@ SCENARIOS = [
     "Squall line",
     "Embedded cell in rain",
     "Isolated hook cell",
+    "Finger cell",
+    "U-shape cell",
+    "Scalloped cell",
 ]
 
 
@@ -122,6 +125,30 @@ class WeatherModel:
             add(11, 33, 2, 2, 0, 0.9, 1.0)      # hook curling round
             add(13, 30, 1.8, 1.8, 0, 0.8, 1.0)
             add(11, 27.5, 1.6, 1.6, 0, 0.7, 0.0)
+        # Shapes from the Airbus FOBN (Figure 8): signs of strong drafts and
+        # hail. Built from several cells; a negative peak cuts rain away
+        # (a gap or a notch). Turbulence on the whole storm, as these are
+        # violent storms. rot 0 = long axis across the track, 90 = along it.
+        elif scenario == "Finger cell":
+            add(0, 26, 6, 2.8, 0, 1.25, 1.0)        # main body
+            for right in (-5.0, -2.2, 0.6):          # fingers reaching towards us
+                add(right, 21.5, 3.2, 0.75, 90, 0.85, 1.0)
+            for right in (-3.6, -0.8):               # keep the gaps between them clear
+                add(right, 20.5, 2.0, 0.55, 90, -0.5)
+        elif scenario == "U-shape cell":
+            add(0, 20.5, 4.2, 1.5, 0, 1.2, 1.0)      # bottom of the U
+            add(-3.4, 24, 1.5, 3.2, 0, 1.1, 1.0)     # left arm
+            add(3.4, 24, 1.5, 3.2, 0, 1.3, 1.0)      # right arm
+            add(0, 25.5, 1.7, 2.6, 0, -1.2)          # the gap (strong updraft)
+        elif scenario == "Scalloped cell":
+            add(0, 25, 6, 4, 0, 1.25, 1.0)           # main body
+            for k in range(14):                      # wavy edge: bump, notch, bump...
+                a = 2 * math.pi * k / 14
+                right, ahead = 7.3 * math.cos(a), 25 + 4.9 * math.sin(a)
+                if k % 2 == 0:
+                    add(right, ahead, 1.3, 1.3, 0, 0.45, 1.0)
+                else:
+                    add(right, ahead, 1.1, 1.1, 0, -0.55)
 
     def add_microburst(self, ax, ay, heading, ahead=3.5):
         """A small, violent storm cell (downburst) ahead: for testing the PWS."""
@@ -291,7 +318,31 @@ SHAPE_K = 1.2          # strength = core * exp(-K d^2): about 30 % on the edge (
 SHAPE_REACH = 1.5      # nothing beyond 1.5 x the volume's size
 EDGE_STRENGTH = 0.26   # the volume's edge is at least this (~21.5 dBZ, green)
 EDGE_RAGGED = 0.15     # ... and reaches up to 15 % past the edge in places
-TOP_FADE = 0.66        # strength lost at the top of a volume (about -25 dB)
+# Weaker towards the top: real storms are strongest below the freezing level
+# and weaken above it. The fade starts at the freezing level (half height if
+# unknown) and grows towards the top. Strong storms (strong updrafts) keep
+# their echo higher, so they lose less. The radar's own -7 dB for ice above
+# the freezing level comes on top of this.
+TOP_FADE_DB_STRONG = 16.0   # dB lost at the top by a storm of strength 1.0
+TOP_FADE_DB_WEAK = 32.0     # ... by a storm of strength 0 (light rain)
+DB_PER_REFL = 10.0 / 0.265  # same scale as radar.to_dbz
+
+
+def top_fade(h, base, top, strength, freezing_ft=None):
+    """Strength (model units) a volume loses at height h (ft MSL).
+
+    strength is FlightGear's rain or snow value (0..1). Nothing is lost below
+    the freezing level; above it the loss grows with the square of the way to
+    the top, so the core stays strong high up and the very top fades fast.
+    """
+    if freezing_ft is None:
+        start = base + 0.5 * (top - base)
+    else:
+        start = min(max(freezing_ft, base), top)
+    x = np.clip((h - start) / max(top - start, 1.0), 0.0, 1.0)
+    s = max(0.0, min(1.0, strength))
+    fade_db = TOP_FADE_DB_STRONG + (TOP_FADE_DB_WEAK - TOP_FADE_DB_STRONG) * (1.0 - s)
+    return fade_db * x * x / DB_PER_REFL
 # Doppler-like turbulence: spectrum width in m/s (shown from 5 m/s, like a
 # real radar). The radar's turbulence scale is m/s / 10 (TURB_SHOW 0.5 = 5 m/s).
 SW_PER_TURB = 10.0     # FlightGear turbulence 1.0 = 10 m/s spread
@@ -315,6 +366,7 @@ class FlightGearWeather:
         self.origin = None
         self.altitude_ft = 0.0
         self.realistic = False      # Echo shape: False = flat FlightGear data
+        self.freezing_ft = None     # freezing level (ft MSL): where tops start to fade
         self.noise = ValueNoise(11)
         self._cache = (None, None, None, None)
 
@@ -441,14 +493,17 @@ class FlightGearWeather:
             if not inh.any():
                 continue
             frac = np.clip((hn - base) / max(top - base, 1.0), 0.0, 1.0)
-            fade = TOP_FADE * np.clip((frac - 0.5) / 0.5, 0.0, 1.0)  # weaker near the top
             core = 0.0
             if v.get("rain-flag") == 1:
-                core = 0.15 + 1.05 * _clamp01(v.get("rain"))
+                rain = _clamp01(v.get("rain"))
+                core = 0.15 + 1.05 * rain
+                fade = top_fade(hn, base, top, rain, self.freezing_ft)
                 val = np.where(inh, np.maximum(strength(core) - fade, 0.0), 0.0)
                 rain_refl[near] = np.maximum(rain_refl[near], val)
             if v.get("snow-flag") == 1:
-                score = 0.15 + 0.65 * _clamp01(v.get("snow"))
+                snow = _clamp01(v.get("snow"))
+                score = 0.15 + 0.65 * snow
+                fade = top_fade(hn, base, top, snow, self.freezing_ft)
                 val = np.where(inh, np.maximum(strength(score) - fade, 0.0), 0.0)
                 snow_refl[near] = np.maximum(snow_refl[near], val)
             if v.get("turbulence-flag") == 1:

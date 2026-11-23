@@ -12,7 +12,7 @@ import math
 
 import numpy as np
 
-from weather import ValueNoise
+from weather import ValueNoise, top_fade
 
 LEVEL_COLORS = np.array(
     [[0, 0, 0], [0, 200, 0], [230, 230, 0], [225, 0, 0],
@@ -173,6 +173,51 @@ def windshear(weather, ax, ay, up_deg, agl_ft, ground_ft=0.0, speed_kt=140.0):
     return {"level": level, "a0": float(A[hazard].min()) - 1.0,
             "a1": float(A[hazard].max()) + 1.0,
             "r0": float(Rg[hazard].min()), "r1": float(Rg[hazard].max())}
+
+
+# ---------------------------------------------------------------------------
+# Hail icon
+# ---------------------------------------------------------------------------
+# No radar sees hail itself. It is guessed from height: a strong echo (45 dBZ)
+# reaching well above the freezing level means an updraft strong enough to
+# carry water up where it freezes and grows into hail. Waldvogel (1979): 45 dBZ
+# at 1.4 km (about 4,600 ft) above the freezing level = about 50 % chance of
+# hail. The NEXRAD hail detection uses the same height difference.
+HAIL_DBZ = 45.0
+HAIL_ABOVE_FREEZING_FT = 4600.0
+ICE_DB = 10.0 * math.log10(0.2)     # ice echoes 5 x weaker (-7 dB), as in scan()
+
+
+def hail_cells(weather, freezing_ft):
+    """FlightGear volumes that are likely to hold hail.
+
+    For each rain volume, find the highest point (in its core) where the radar
+    would still see 45 dBZ, with the same height profile and the same ice
+    weakening above the freezing level as the radar picture. Hail when that
+    point is at least HAIL_ABOVE_FREEZING_FT above the freezing level.
+
+    Returns a list of dicts: x, y (NM), h45 (ft MSL, highest 45 dBZ point).
+    """
+    if freezing_ft is None:
+        return []                   # freezing level unknown: no hail guess
+    out = []
+    for item in getattr(weather, "volumes", []):
+        v = item["data"]
+        base, top = v.get("base-altitude-ft"), v.get("top-altitude-ft")
+        if v.get("rain-flag") != 1 or base is None or top is None or top <= base:
+            continue
+        rain = max(0.0, min(1.0, v.get("rain") or 0.0))
+        core = 0.15 + 1.05 * rain
+        h = np.arange(base, top + 1.0, 100.0)
+        refl = np.full(h.shape, core)
+        if getattr(weather, "realistic", False):
+            refl = refl - top_fade(h, base, top, rain, freezing_ft)
+        dbz = np.where(refl > 0.01, to_dbz(np.maximum(refl, 0.01)), -99.0)
+        dbz = dbz + np.where(h > freezing_ft, ICE_DB, 0.0)
+        strong = h[dbz >= HAIL_DBZ]
+        if strong.size and strong.max() >= freezing_ft + HAIL_ABOVE_FREEZING_FT:
+            out.append({"x": item["x"], "y": item["y"], "h45": float(strong.max())})
+    return out
 
 
 class RadarScanner:
@@ -356,6 +401,12 @@ class RadarScanner:
         levels[snow_detected & ~rain_detected] = 5
         levels[snow_detected & rain_detected & (levels < 4)] = 6
         if mode == "WX+T":
-            levels[(r <= TURB_MAX_RANGE_NM) & (levels >= 1) & (turb > TURB_SHOW)] = 4
+            # Doppler measures how fast the drops move, not how strong the echo
+            # is, so the gain knob does not change it (Airbus FOBN: "the
+            # turbulence display is not affected by gain"). It still needs
+            # enough rain or snow for an echo at calibrated gain.
+            wet = (((rain_dbz - gain_db) >= DBZ_BANDS[0])
+                   | ((snow_dbz - gain_db) >= DBZ_BANDS[0]))
+            levels[(r <= TURB_MAX_RANGE_NM) & wet & (turb > TURB_SHOW)] = 4
         self.ground_mask[i0:i1] = ((levels > 0) & ground_wins)[keep]
         return levels[keep]

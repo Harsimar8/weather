@@ -63,6 +63,7 @@ HERE_PROPS = {
     "tas_kt": "/instrumentation/airspeed-indicator/true-speed-kt",
     "hdg_mag": "/orientation/heading-magnetic-deg",
     "speed_up": "/sim/speed-up",             # time acceleration (1 = normal)
+    "fps": "/sim/frame-rate",                # FlightGear pictures per second
     "v_north_fps": "/velocities/speed-north-fps",   # ground track comes from these
     "v_east_fps": "/velocities/speed-east-fps",
     "vs_fps": "/velocities/vertical-speed-fps",     # climbing or descending (PWS)

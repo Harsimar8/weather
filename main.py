@@ -21,7 +21,7 @@ from udp_link import DEFAULT_PORT as UDP_PORT, UDPLink
 from fake_plane import DEFAULT_LAT, DEFAULT_LON, FakePlane
 from fg_drive import FGDriver
 from fg_link import PLACE, PLACE_RESULT, FGLink
-from radar import MODES, TILT_LIMIT_DEG, RadarScanner, auto_tilt, windshear
+from radar import MODES, TILT_LIMIT_DEG, RadarScanner, auto_tilt, hail_cells, windshear
 from weather import (PRECIP_KINDS, SCENARIOS, Cell, WeatherModel, FlightGearWeather,
                      parse_metar)
 from basic_weather import LayerWeather, freezing_level_ft
@@ -69,6 +69,7 @@ class MainWindow(QMainWindow):
         self.udp_error = ""         # why listening on the UDP port failed
         self.udp_retry = 0.0        # when to try listening again
         self.driver = None          # moves FlightGear's aircraft smoothly (fg_drive.py)
+        self.udp_off_since = None   # since when FlightGear ignores the UDP position
         self.trail = []             # (x, y) NM every second: drawn on the map
         self.trail_next = 0.0
         self.origin = None          # lat/lon that maps to (0, 0) NM
@@ -125,12 +126,18 @@ class MainWindow(QMainWindow):
         self.connect_btn = QPushButton("Connect to FlightGear")
         self.connect_btn.clicked.connect(self.toggle_fg)
         self.status = QLabel("Not connected")
+        # FlightGear frames per second and how its aircraft is moved, in colour.
+        self.fps_label = QLabel("")
+        self.fps_label.setToolTip(
+            "FlightGear pictures per second. Green 25+ = smooth, amber 15-25,\n"
+            "red below 15 = jerky. Lower FlightGear's graphics to raise it.")
         f.addRow("Mode", self.source)
         f.addRow("Host", self.host)
         f.addRow("Telnet port", self.port)
         f.addRow("UDP port (other sim)", self.udp_port)
         f.addRow(self.connect_btn)
         f.addRow(self.status)
+        f.addRow(self.fps_label)
         # How FlightGear's rain volumes are drawn: as FlightGear gives them
         # (flat), or with a real storm's shape, Doppler-like turbulence and
         # F-factor windshear filled in by the app.
@@ -743,6 +750,43 @@ class MainWindow(QMainWindow):
         self.driver.target = {"lat": u["lat"], "lon": u["lon"], "alt_ft": u["alt_ft"],
                               "heading": u["heading"], "gs_kt": gs,
                               "track": u.get("track", u["heading"]), "t": self.udp.last_rx}
+        self._check_udp_drive()
+
+    def _check_udp_drive(self):
+        """UDP lines that FlightGear ignores (no --generic option, or the
+        wxradar-in.xml file missing) leave its aircraft where it is. If it stays
+        more than 1 NM from where we put it for 3 s, send by telnet instead."""
+        d, s = self.driver, self.fg.state if self.fg else None
+        now = time.monotonic()
+        if d.mode != "udp" or not s or "lat" not in s:
+            self.udp_off_since = None
+            return
+        pos = d.position()
+        if pos is None:
+            return
+        off = math.hypot((s["lat"] - pos[0]) * 60.0,
+                         (s["lon"] - pos[1]) * 60.0 * math.cos(math.radians(pos[0])))
+        if off <= 1.0:
+            self.udp_off_since = None
+        elif self.udp_off_since is None:
+            self.udp_off_since = now
+        elif now - self.udp_off_since > 3.0:
+            d.use_telnet()
+            self.udp_off_since = None
+            self._notify("FlightGear does not read the UDP position (port 5510): moving it "
+                         "by telnet (slower, can jerk). For smooth movement copy "
+                         "wxradar-in.xml to fgdata\\Protocol and start FlightGear with "
+                         "--generic=socket,in,30,127.0.0.1,5510,udp,wxradar-in", 20.0)
+
+    def _show_fps(self, fps, how):
+        """FlightGear frames per second, coloured: green smooth, amber, red jerky."""
+        if fps is None:
+            self.fps_label.setText("")
+            return
+        color = "#1a9e1a" if fps >= 25 else ("#d98c00" if fps >= 15 else "#d62020")
+        word = "smooth" if fps >= 25 else ("a bit jerky" if fps >= 15 else "jerky")
+        self.fps_label.setText(f"<span style='color:{color}; font-weight:bold'>"
+                               f"FlightGear {fps:.0f} frames/s ({word})</span>{how}")
 
     def _stop_driver(self):
         if self.driver:
@@ -785,10 +829,6 @@ class MainWindow(QMainWindow):
                 fg = (f"WARNING: FlightGear flight model is '{fdm}', not null:\n"
                       "it fights the position and jerks. Restart FlightGear\n"
                       "with --fdm=null in Additional settings.")
-            fps = self.driver.fps if self.driver else None
-            if fps is not None:
-                fg += f"\nFlightGear {fps:.0f} frames/s" + (
-                    " (slow: movement looks jerky)" if fps < 20 else "")
         self._set_status(f"UDP from {self.udp.sender[0]}: {self.udp.packets} packets\n"
                          f"{s['lat']:.4f} {s['lon']:.4f}  HDG {self.heading:03.0f}  "
                          f"{s['alt_ft']:.0f} ft\n{fg}")
@@ -1274,6 +1314,7 @@ class MainWindow(QMainWindow):
         The ND is track up, so the picture is turned to the track.
         """
         scan_weather = self._scan_weather()
+        self.fg_weather.freezing_ft = self.freezing_ft   # storm tops fade from here
         alt, ground = self._altitudes()
         connected = (self.fg and self.fg.connected
                      and (self.source.currentText() != UDP_MODE or self._fg_driven()))
@@ -1529,7 +1570,10 @@ class MainWindow(QMainWindow):
 
     def tick(self):
         now = time.perf_counter()
-        dt = min(0.1, now - self.last)
+        # Real time since the last frame, so the aircraft keeps its speed even
+        # when the app draws slowly (FlightGear on the same PC). Only very long
+        # stops (window dragged, PC busy) are cut, to avoid a big jump.
+        dt = min(1.0, now - self.last)
         self.last = now
 
         self.weather.intensity = self.intensity.value() / 100
@@ -1674,7 +1718,30 @@ class MainWindow(QMainWindow):
             pws = {"level": "warning", "a0": -20.0, "a1": 20.0,
                    "r0": rng * 0.12, "r1": rng * 0.25}
 
-        self.display.info.update(gs=gs, tas=tas, wind_from=(wf - var) % 360, wind_kt=wk)
+        # FlightGear frames per second (and how we move its aircraft), in colour.
+        if self.fg and self.fg.connected:
+            d = self.driver if fg_driven else None
+            fps = self.fg.state.get("fps")
+            if d and d.mode == "telnet" and d.fps is not None:
+                fps = d.fps
+            how = ("" if d is None else
+                   "  - aircraft moved by UDP" if d.mode == "udp" else
+                   "  - aircraft moved by telnet (slower)")
+            self._show_fps(fps, how)
+        else:
+            self._show_fps(None, "")
+
+        # Hail icons: FlightGear volumes whose 45 dBZ echo reaches high above
+        # the freezing level. Placed relative to the track line, like the echoes.
+        hail = []
+        if self._scan_weather() is self.fg_weather:
+            for c in hail_cells(self.fg_weather, self.freezing_ft):
+                dx, dy = c["x"] - self.ax, c["y"] - self.ay
+                rel = (math.degrees(math.atan2(dx, dy)) - self.track + 540.0) % 360.0 - 180.0
+                hail.append((rel, math.hypot(dx, dy)))
+
+        self.display.info.update(gs=gs, tas=tas, wind_from=(wf - var) % 360, wind_kt=wk,
+                                 hail=hail)
         self.display.info.update(up=(self.track - var) % 360, up_label="TRK",
                                  heading=(self.heading - var) % 360, hdg_bug=bug,
                                  range=rng, on=on, mode=self._radar_mode(), tilt=tilt,
